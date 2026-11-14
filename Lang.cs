@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Text;
@@ -408,6 +408,30 @@ namespace Installer
             Add(d, "本地模式", "Local mode");
             Add(d, "U 盘模式", "USB drive mode");
             Add(d, "工坊下载位置", "Workshop download folder");
+
+            // ---------- 左栏：游戏现状 ----------
+            Add(d, "游戏现状", "In game now");
+            Add(d, "个 MOD 正在游戏里启用", "mods enabled in game");
+            Add(d, "游戏 addons 里还没读到 MOD", "No mods found in the game's addons folder");
+            Add(d, "游戏 addons：{0} 个 vpk · 开启 {1} · 关闭 {2}", "Game addons: {0} vpk · {1} on · {2} off");
+            Add(d, " · 未归类 {3}", " · {3} unclassified");
+            Add(d, "游戏里还没有 MOD：勾选按库里的来", "Nothing installed yet — selection follows the library");
+            Add(d, "✓ 勾选和游戏一致（{0} 个都勾着）", "✓ Selection matches the game ({0} ticked)");
+            Add(d, "，另勾了 {0} 个还没装的", ", plus {0} not installed yet");
+            Add(d, "游戏里有 {0} 个没勾上", "{0} in-game mods are not ticked");
+            Add(d, "（点「按游戏现状回填」）", " (use Fill from game)");
+            Add(d, "正在用的这些改了什么：", "What these mods change:");
+            Add(d, "…还有 {0} 类", "…and {0} more categories");
+            Add(d, "游戏目录 · {0} 个 MOD · {1}", "Game folder · {0} mods · {1}");
+            Add(d, "在游戏里改过开关或新订阅了东西，点上面「刷新」重读一遍", "Changed switches in game or subscribed to something new? Hit Refresh above");
+            Add(d, "游戏目录里没有可读的 MOD（选错目录的话先在上面改正）", "No readable mods in the game folder (fix the path above if it's wrong)");
+            Add(d, "刷新于 {0} · 读 addons + addonlist.txt", "Updated {0} · addons + addonlist.txt");
+            Add(d, "按游戏现状回填", "Fill from game");
+            Add(d, "刷新", "Refresh");
+            Add(d, "启动时自动回填", "Auto-fill on start");
+            Add(d, "游戏 addons 里还没认出 MOD，没得回填", "No mods recognised in the game's addons — nothing to fill");
+            Add(d, "正在扫库，扫完再回填", "Scanning the library — fill when it finishes");
+            Add(d, "正在扫库，稍等一下", "Scanning the library — one moment");
         }
     }
 }

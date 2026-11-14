@@ -29,6 +29,12 @@ namespace Installer
         public string SubjectLevel = "";
         public string Evidence = "";     // 归组依据：包内资源 / 名称兜底 / 单文件
 
+        /// <summary>
+        /// 这个套装带的插件组件（要落到 bin\neko\plugins 的那套 DLL）。
+        /// 绝大多数包是 null；只有「vpk 旁边还带 bin\neko\plugins」的包才有。
+        /// </summary>
+        public PluginPack Plugin;
+
         public bool IsSet { get { return Parts.Count > 1; } }
 
         public ModItem Main
@@ -682,9 +688,16 @@ namespace Installer
             try
             {
                 string a = Path.GetFullPath(dir).TrimEnd('\\');
-                string b = Path.GetFullPath(Core.PkgDir).TrimEnd('\\');
-                if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
-                return a.StartsWith(b + "\\", StringComparison.OrdinalIgnoreCase);
+                // 程序自己那一摊（配置/日志/源码），以及组件包目录：这两处的 vpk 是平台自带的，
+                // 不是用户的 MOD。组件包放在库里时（游戏内容\...\扩展平台）以前会被当成 MOD 列出来。
+                foreach (string self in new string[] { Core.PkgDir, Core.PkgRoot })
+                {
+                    if (string.IsNullOrEmpty(self)) continue;
+                    string b = Path.GetFullPath(self).TrimEnd('\\');
+                    if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+                    if (a.StartsWith(b + "\\", StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                return false;
             }
             catch { return false; }
         }
@@ -1108,6 +1121,7 @@ namespace Installer
             }
 
             long tCluster = swg.ElapsedMilliseconds;
+            BindPlugins();                         // 谁带 bin\neko\plugins，给谁挂上插件清单
             ApplyCatsCore();                       // 人工归过类的，先按人工的算
             SortGroups();
             Core.Log("INFO", "归组分相: 分桶 " + tBuckets + " ms, 聚组 " + (tCluster - tBuckets) + " ms, 收尾 " + (swg.ElapsedMilliseconds - tCluster) + " ms");
@@ -1157,6 +1171,35 @@ namespace Installer
             }
             CatPrefs.Save();
             if (any) ApplyCats();
+        }
+
+        /// <summary>
+        /// 给套装挂插件组件：同一个包里的每个 vpk 往上找 bin\neko\plugins，找到就挂上。
+        ///
+        /// 只挂到「第一个命中的部件所在的套装」，装的时候还会按 PluginPack.Key 去重 ——
+        /// 同一个包里的模型 vpk 和音效 vpk 有可能被内容聚类拆成两个套装，
+        /// 两边都指到同一份插件时，不能让那 4 个 DLL 被装两遍。
+        /// </summary>
+        static void BindPlugins()
+        {
+            PluginKit.ClearCache();
+            int n = 0;
+            List<string> names = new List<string>();
+            foreach (ModGroup g in Groups)
+            {
+                foreach (ModItem it in g.Parts)
+                {
+                    // 压缩包里的 vpk 没有真实目录结构可找；游戏 addons 里那份本来就没有 bin
+                    if (it.IsArchive || it.FromGame) continue;
+                    PluginPack p = PluginKit.Find(it.FullPath);
+                    if (p == null) continue;
+                    g.Plugin = p;
+                    n++;
+                    names.Add(g.Name);
+                    break;
+                }
+            }
+            if (n > 0) Core.Log("INFO", "带插件组件的套装: " + n + " 个（" + string.Join(" / ", names.ToArray()) + "）");
         }
 
         public static void SortGroups()

@@ -109,6 +109,8 @@ namespace Installer
             bool dumpTree = false;
             bool ovDump = false;
             bool recogSelf = false;
+            bool plugSelf = false;
+            string plugTry = null;
             bool layoutSelf = false;
             bool noDpi = false;
             string vpkFile = null;
@@ -183,6 +185,8 @@ namespace Installer
                 else if (string.Equals(a, "--dumptree", StringComparison.OrdinalIgnoreCase)) dumpTree = true;
                 else if (string.Equals(a, "--ovdump", StringComparison.OrdinalIgnoreCase)) ovDump = true;
                 else if (string.Equals(a, "--recogself", StringComparison.OrdinalIgnoreCase)) recogSelf = true;
+                else if (string.Equals(a, "--plugself", StringComparison.OrdinalIgnoreCase)) plugSelf = true;
+                else if (a.StartsWith("--plugtry=", StringComparison.OrdinalIgnoreCase)) plugTry = a.Substring(10).Trim('"');
                 else if (string.Equals(a, "--nodpi", StringComparison.OrdinalIgnoreCase)) noDpi = true;
                 else if (string.Equals(a, "--layoutself", StringComparison.OrdinalIgnoreCase)) layoutSelf = true;
                 else if (a.StartsWith("--vpk=", StringComparison.OrdinalIgnoreCase)) vpkFile = a.Substring(6).Trim('"');
@@ -195,7 +199,7 @@ namespace Installer
             // 必须在下面这些分支 return **之前** 置位 —— 它们一样会跑扫描、开界面，一样会改到配置；
             // 以前这行写在所有自检分支后面，等于对它们全部无效。
             Core.SelfTesting = selfTest || uiTest || copyTest || tweakSelf || launchSelf || dupSelf
-                            || addonSelf || safeSelf || dumpId || dumpTree || ovDump || recogSelf
+                            || addonSelf || safeSelf || dumpId || dumpTree || ovDump || recogSelf || plugSelf || plugTry != null
                             || mapShot || mapSelf || scanRace || layoutSelf || wsSelf || wsNet != null || wsSearch != null;
 
             // 单实例只约束界面模式：已经开着就把那个窗口叫到前面来。
@@ -316,6 +320,19 @@ namespace Installer
             {
                 int bad = Catalog.SelfTestRecognition();
                 Console.WriteLine("recogself failures = " + bad);
+                return bad == 0 ? 0 : 1;
+            }
+            if (plugSelf)
+            {
+                // 插件组件自检：纯离线，只验共享判定和目录解析，不碰游戏目录
+                int bad = PluginKit.SelfTest();
+                Console.WriteLine("plugself failures = " + bad);
+                return bad == 0 ? 0 : 1;
+            }
+            if (plugTry != null)
+            {
+                // 真实库 → 假游戏目录：完整走一遍装插件 / 写记录 / 一键还原
+                int bad = Work.PluginRoundTrip(plugTry);
                 return bad == 0 ? 0 : 1;
             }
             if (tweakSelf)
@@ -516,6 +533,8 @@ namespace Installer
                     if (uiLaunch) { f.UiTestLaunch(); System.Windows.Forms.Application.DoEvents(); }
                     if (uiDup) { f.UiTestDup(); System.Windows.Forms.Application.DoEvents(); }
                     if (uiDeps) { f.UiTestDeps(); System.Windows.Forms.Application.DoEvents(); }
+                    // --logopen 单独就能生效：截图要看「日志展开时左栏怎么排」，不该非得先进抽屉自检
+                    if (uiLogOpen && !uiDrawer) { f.SetLogOpen(true); System.Windows.Forms.Application.DoEvents(); }
                     if (mapShot) { f.OverviewShot(); System.Windows.Forms.Application.DoEvents(); return 0; }
                     if (loadShot) { f.LoadingShot(); System.Windows.Forms.Application.DoEvents(); return 0; }
                     if (downsShot) { f.DownsShot(); System.Windows.Forms.Application.DoEvents(); return 0; }

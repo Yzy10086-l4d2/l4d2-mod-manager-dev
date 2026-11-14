@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -19,6 +19,14 @@ namespace Installer
         private bool drawerOpen;                  // 左栏（装什么 / 安装选项 / 日志）是否展开
         private FlatButton btnLogToggle;          // 左栏「显示日志 / 收起日志」
         private Label lblLibInfo;                 // 左栏底部一行库信息，别让下半屏空着
+        // 左栏「游戏现状」卡片：日志收起时它就占着左栏下半屏（以前那块是纯留白），
+        // 同时承担「按游戏现状回填勾选」和「刷新」两个入口 —— 换机器第一件事就是看这里。
+        private Section gNow;
+        private Label lblNowNum, lblNowUnit, lblNowSub, lblNowState, lblNowFoot, lblNowCats;
+        private FlatButton btnNowSync, btnNowRefresh;
+        private CheckBox chkAutoSync;
+        private string nowStamp = "";             // 上一次读到游戏现状的时刻
+        private int nowCatRows = 6;               // 「分类分布」这一块能放几行（按卡片高度算，放不下就截断）
         private bool logOpen;                     // 日志卡片展开（默认收起：排错才看，不该常驻）
         private CheckBox chkL4N, chkSkeeto, chkAsset, chkMqcam, chkDxvk, chkLaunch, chkCfg, chkSwap, chkStrict;
         private RadioButton rdSkip, rdOver;
@@ -254,6 +262,9 @@ namespace Installer
                         else if (!Core.TestGame(txtGame.Text)) Core.Log("WARN", "没自动找到游戏，点「自动找」或「浏览…」");
                         ApplyConfig();
                         FillProfiles(null);
+                        // 换机器第一屏：配置里一条勾选都对不上（U 盘带来的配置在别的电脑上没有同样的库），
+                        // 就按游戏 addons + addonlist.txt 回填 —— 不能让 63 个已装的 MOD 显示成一排没勾。
+                        AutoSeedIfNeeded("启动");
                         Core.Log("INFO", "启动计时: 填充列表 " + __sw2.ElapsedMilliseconds + " ms");
                         __sw2.Restart();
                         RefreshConflicts(false);          // 启动只做内存里的同名/同大小判断
@@ -315,14 +326,107 @@ namespace Installer
         // 包不齐就直接顶到状态栏上，不用等装到一半才发现
         private void ShowPackStatus(List<string> packs, bool packOk)
         {
-            if (packOk) { lblStatus.Text = Lang.S("就绪"); lblStatus.ForeColor = Theme.Ink2; return; }
+            if (packOk)
+            {
+                // 包补齐了（比如在设置里指对了组件包目录）：把我们自己取消的那几项还原回去。
+                // 只还原「当初是程序取消的」，用户手动取消的不动。
+                if (autoUnchecked.Count > 0)
+                {
+                    applying = true;
+                    try
+                    {
+                        foreach (string name in autoUnchecked)
+                        {
+                            CheckBox c = ComponentBox(name);
+                            if (c != null) c.Checked = true;
+                        }
+                    }
+                    finally { applying = false; }
+                    Core.Log("INFO", "组件包已补齐，恢复勾选：" + string.Join("、", new List<string>(autoUnchecked).ToArray()));
+                    autoUnchecked.Clear();
+                }
+                packMiss = null;
+                SetPackIdleStatus();
+                return;
+            }
+
+            // 关键不是那句警告，是左栏那些勾：包根本没附带时，勾着它们 = 告诉新手「这些是必须装的」，
+            // 他一点「开始装」就换来一片 FAIL，然后认定软件坏了。缺的组件自动取消勾选，
+            // 但不置灰 —— 用户自己补齐包之后还能手动勾回来。
+            applying = true;
+            try
+            {
+                foreach (string l in packs)
+                {
+                    int cut = l.IndexOf("缺", StringComparison.Ordinal);
+                    if (cut < 0) continue;
+                    string name = l.Substring(0, cut).Trim();
+                    CheckBox c = ComponentBox(name);
+                    if (c != null && c.Checked) { c.Checked = false; autoUnchecked.Add(name); }
+                }
+            }
+            finally { applying = false; }
+
             List<string> miss = new List<string>();
             foreach (string l in packs)
             {
                 if (l.IndexOf("缺", StringComparison.Ordinal) >= 0) miss.Add(l.Substring(0, l.IndexOf("缺", StringComparison.Ordinal)).Trim());
             }
-            lblStatus.ForeColor = Theme.Accent;
-            lblStatus.Text = "⚠ U 盘包不齐：缺 " + string.Join("、", miss.ToArray()) + "（详见日志）";
+            packMiss = miss;
+            SetPackIdleStatus();
+            Core.Log("INFO", "增强包未附带：" + string.Join("、", miss.ToArray()) + "，已自动取消对应勾选");
+        }
+
+        /// <summary>缺了哪些增强包（状态栏文案要用）。</summary>
+        private List<string> packMiss;
+        /// <summary>被程序自动取消勾选的组件名（包补齐后要还原，用户手动取消的不算）。</summary>
+        private readonly HashSet<string> autoUnchecked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>状态栏现在显示的是「库里还没有 MOD」那句引导。有内容之后要换掉，不能一直挂着。</summary>
+        private bool emptyStatusShown;
+
+        /// <summary>
+        /// 状态栏那句「现在是什么状态」。优先级：空库（最该说的是 MOD 从哪来）＞ 缺增强包 ＞ 就绪。
+        /// 空库优先，是因为新人第一次打开时这两件事同时成立，而「缺 5 个增强包」只会让他以为软件坏了。
+        /// </summary>
+        private void SetPackIdleStatus()
+        {
+            if (Core.ModList.Count == 0)
+            {
+                lblStatus.ForeColor = Theme.Ink3;
+                lblStatus.Text = Lang.S("库里还没有 MOD：点右上「工坊」搜索下载，或把 .vpk 所在文件夹设成 MOD 主库");
+                emptyStatusShown = true;
+                return;
+            }
+            emptyStatusShown = false;
+            if (packMiss != null && packMiss.Count > 0)
+            {
+                lblStatus.ForeColor = Theme.Ink3;
+                // 不用「U 盘包不齐」：单人下载 exe 的人根本没有 U 盘，这四个字对他只是无意义的告警
+                lblStatus.Text = Lang.F("增强包未附带：{0}（只装 MOD 不受影响，缺的已自动取消勾选）", string.Join("、", packMiss.ToArray()));
+                return;
+            }
+            lblStatus.Text = Lang.S("就绪");
+            lblStatus.ForeColor = Theme.Ink2;
+        }
+
+        /// <summary>组件包目录改了之后重查一遍：缺的勾掉、状态栏跟着更新。只读探测，不扫库、不动文件。</summary>
+        internal void RefreshPackStatus()
+        {
+            bool ok;
+            List<string> packs = Core.CheckPackages(out ok);
+            ShowPackStatus(packs, ok);
+        }
+
+        /// <summary>组件名 → 左栏对应的勾选框。</summary>
+        private CheckBox ComponentBox(string name)
+        {
+            if (name == null) return null;
+            if (name.StartsWith("L4N", StringComparison.OrdinalIgnoreCase)) return chkL4N;
+            if (name.StartsWith("Skeeto", StringComparison.OrdinalIgnoreCase)) return chkSkeeto;
+            if (name.StartsWith("素材包", StringComparison.Ordinal)) return chkAsset;
+            if (name.StartsWith("MQCam", StringComparison.OrdinalIgnoreCase)) return chkMqcam;
+            if (name.StartsWith("dxvk", StringComparison.OrdinalIgnoreCase)) return chkDxvk;
+            return null;
         }
 
         /// <summary>
@@ -538,6 +642,99 @@ namespace Installer
             btnLogToggle.Click += delegate { SetLogOpen(!logOpen); };
             tips.SetToolTip(btnLogToggle, Lang.S("安装日志：什么时候开始、每个文件复制到哪、哪一步跳过了。\r\n平时收起来，出问题再展开。"));
             Controls.Add(btnLogToggle);
+
+            // ---- 左栏下：游戏现状（和日志共用同一块地方，谁展开谁占）----
+            // 收起日志时这块本来是整片留白 —— 换机器的人最想知道的恰恰是「游戏里现在到底装着什么」，
+            // 与其空着，不如把 addons + addonlist.txt 的实况摆在最显眼的位置。
+            gNow = new Section();
+            gNow.Caption = Lang.S("游戏现状");
+            gNow.SetBounds(Theme.M, 478, leftW, 200);
+            Controls.Add(gNow);
+
+            lblNowNum = new Label(); lblNowNum.Text = "0";
+            lblNowNum.SetBounds(12, 26, 56, 30);
+            lblNowNum.Font = new Font(Theme.UI.FontFamily, 19F, FontStyle.Bold);
+            lblNowNum.TextAlign = ContentAlignment.MiddleRight;
+            lblNowNum.ForeColor = Theme.Ok;
+            lblNowNum.BackColor = Color.Transparent;
+            gNow.Controls.Add(lblNowNum);
+
+            lblNowUnit = new Label(); lblNowUnit.Text = Lang.S("个 MOD 正在游戏里启用");
+            lblNowUnit.SetBounds(74, 30, leftW - 24 - 62, 22);
+            lblNowUnit.Font = Theme.UIBold;
+            lblNowUnit.TextAlign = ContentAlignment.MiddleLeft;
+            lblNowUnit.AutoEllipsis = true;
+            lblNowUnit.ForeColor = Theme.Ink;
+            lblNowUnit.BackColor = Color.Transparent;
+            gNow.Controls.Add(lblNowUnit);
+
+            lblNowSub = new Label(); lblNowSub.Text = Lang.S("游戏 addons 里还没读到 MOD");
+            lblNowSub.SetBounds(12, 60, leftW - 24, 18);
+            lblNowSub.Font = Theme.UISmall;
+            lblNowSub.AutoEllipsis = true;
+            lblNowSub.ForeColor = Theme.Ink2;
+            lblNowSub.BackColor = Color.Transparent;
+            gNow.Controls.Add(lblNowSub);
+
+            lblNowState = new Label(); lblNowState.Text = "";
+            lblNowState.SetBounds(12, 82, leftW - 24, 18);
+            lblNowState.Font = Theme.UISmall;
+            lblNowState.AutoEllipsis = true;
+            lblNowState.ForeColor = Theme.Ink3;
+            lblNowState.BackColor = Color.Transparent;
+            gNow.Controls.Add(lblNowState);
+
+            // 主入口：把游戏里正在用的这批填进勾选。换机器后不用一条条点。
+            btnNowSync = new FlatButton(); btnNowSync.Text = Lang.S("按游戏现状回填");
+            btnNowSync.SetBounds(12, 106, 128, 28);
+            btnNowSync.Font = Theme.UISmall;
+            btnNowSync.Click += delegate { DoSyncFromGame(); };
+            tips.SetToolTip(btnNowSync, Lang.S("读游戏 addons 目录和 left4dead2\\addonlist.txt：\r\n"
+                + "文件在 addons 里、开关是 1 的那些直接勾上，关着的保持不勾。\r\n"
+                + "只改界面上的勾选，不动游戏里的任何文件。"));
+            gNow.Controls.Add(btnNowSync);
+
+            // 游戏外面被改过（工坊订阅、手动丢 vpk、开关在游戏里调过）→ 点这里重读
+            btnNowRefresh = new FlatButton(); btnNowRefresh.Soft = true; btnNowRefresh.Text = Lang.S("刷新");
+            btnNowRefresh.SetBounds(148, 106, 68, 28);
+            btnNowRefresh.Font = Theme.UISmall;
+            btnNowRefresh.Click += delegate { DoRefreshGame(); };
+            tips.SetToolTip(btnNowRefresh, Lang.S("重新读一遍游戏 addons 和 addonlist.txt，\r\n"
+                + "工坊里新订阅的、手动拷进去的、在游戏里调过开关的，这里一刷就对上。"));
+            gNow.Controls.Add(btnNowRefresh);
+
+            chkAutoSync = new CheckBox();
+            chkAutoSync.Text = Lang.S("启动时自动回填");
+            chkAutoSync.SetBounds(224, 108, leftW - 224 - 12, 24);
+            chkAutoSync.Font = Theme.UISmall;
+            chkAutoSync.Checked = Core.Cfg.AutoSync;
+            Theme.Dress(chkAutoSync);
+            tips.SetToolTip(chkAutoSync, Lang.S("勾上：每次启动时如果一条勾选都没有（换了台机器 / 配置是空的），\r\n"
+                + "就自动按游戏里正在用的那批填上。\r\n关掉：勾选永远只按你上次留下的来，游戏里有什么都不管。"));
+            chkAutoSync.CheckedChanged += delegate
+            {
+                Core.Cfg.AutoSync = chkAutoSync.Checked;
+                Core.SaveConfig();
+            };
+            gNow.Controls.Add(chkAutoSync);
+
+            lblNowFoot = new Label(); lblNowFoot.Text = "";
+            lblNowFoot.SetBounds(12, 140, leftW - 24, 18);
+            lblNowFoot.Font = Theme.UISmall;
+            lblNowFoot.AutoEllipsis = true;
+            lblNowFoot.ForeColor = Theme.Ink3;
+            lblNowFoot.BackColor = Color.Transparent;
+            gNow.Controls.Add(lblNowFoot);
+
+            // 这批到底动了哪些东西：窗口拉高时它把剩下的竖向空间填满，而不是留一片白
+            lblNowCats = new Label(); lblNowCats.Text = "";
+            lblNowCats.SetBounds(12, 106, leftW - 24, 40);
+            lblNowCats.Font = Theme.UISmall;
+            lblNowCats.ForeColor = Theme.Ink2;
+            lblNowCats.BackColor = Color.Transparent;
+            lblNowCats.AutoSize = false;
+            lblNowCats.TextAlign = ContentAlignment.TopLeft;
+            gNow.Controls.Add(lblNowCats);
 
             // 左栏底部这行信息：以前下面大半屏是空的，看着像漏画了东西；
             // 放一行「库 · 多少个 · 上次装机」既填了空白，又是有用的上下文。
@@ -845,9 +1042,12 @@ namespace Installer
             }
             finally { applying = false; }
             txtLaunch.Text = Core.Cfg.LaunchOptions;
-            // 第一次发现有参数存档就默认勾上 —— 用户存过参数，摆明了就是下次装机要自动写进去
+            // 存过参数存档的老用户，默认勾上「写参数配置」是合理的（他存过就说明下次要用）。
+            // 但全新安装的人连一个 MOD 都还没下，不该有任何默认勾选项 —— 否则 0 个 MOD
+            // 点「开始装」也会顺手写 cfg。用「配置文件是否存在」区分，不靠猜。
+            bool fresh = !File.Exists(Core.CfgPath);
             bool firstTimeTweak = Core.Cfg.TweakSet.Length == 0 && Tweaks.List().Count > 0;
-            chkCfg.Checked = Core.Cfg.CfgFile || firstTimeTweak;
+            chkCfg.Checked = !fresh && (Core.Cfg.CfgFile || firstTimeTweak);
             rdSkip.Checked = !Core.Cfg.Overwrite;
             rdOver.Checked = Core.Cfg.Overwrite;
             modeSync = true;
@@ -916,6 +1116,7 @@ namespace Installer
                     QueuePrecheck();            // 按钮亮不亮交给校验条算（模式变了勾选也可能变了）
                     RefreshMods();
                     RefreshConflicts();
+                    AutoSeedIfNeeded("切工作模式");   // 本地模式下勾选就该等于游戏现状
                     if (treeView != null) RebuildViews();
                     RunPendingRoot();
                     lblStatus.Text = Lang.S("就绪");
@@ -1883,6 +2084,240 @@ namespace Installer
             }
             UpdateSel();
             UpdateModCaption();
+            RefreshGameNow();
+            // 空库那句引导只在真的空着时成立：下完/装完第一个 MOD 就换回常规状态
+            if (emptyStatusShown && Core.ModList.Count > 0) SetPackIdleStatus();
+        }
+
+        // ------------------------------------------------ 游戏现状 / 自动回填
+        // 「游戏里现在到底装着什么」只有一个来源：游戏 addons 目录里真有这个文件，
+        // 并且 left4dead2\addonlist.txt 里这条是 "1"。文件在、开关是 0 = 装过但关着。
+        // 以前启动只认配置里记的勾选，换台机器（配置是空的）就显示一片没勾，
+        // 明明 63 个 vpk 躺在 addons 里 —— 这正是「拿 U 盘去别的机器」最难受的地方。
+
+        private struct GameNow
+        {
+            public int Installed, On, Off;
+            public HashSet<string> Keys;
+            public Dictionary<string, int> Cats;
+        }
+
+        private GameNow ReadGameNow()
+        {
+            GameNow g = new GameNow();
+            g.Keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            g.Cats = new Dictionary<string, int>(StringComparer.Ordinal);
+            List<ModItem> list = Core.ModList;
+            if (list == null) return g;
+            for (int i = 0; i < list.Count; i++)
+            {
+                ModItem m = list[i];
+                if (m == null || !(m.FromGame || m.Installed)) continue;
+                g.Installed++;
+                if (!m.AddonOn) { g.Off++; continue; }   // 装过但关着：不勾，卡片里只报个数
+                g.On++;
+                if (m.Key != null) g.Keys.Add(m.Key);
+                string c = m.Cat == null ? "杂项" : m.Cat;
+                int n;
+                g.Cats.TryGetValue(c, out n);
+                g.Cats[c] = n + 1;
+            }
+            return g;
+        }
+
+        /// <summary>把左栏那张卡按当前的 addons / addonlist 实况重画一遍。</summary>
+        private void RefreshGameNow()
+        {
+            if (gNow == null || gNow.IsDisposed) return;
+            if (Core.ScanInProgress) return;           // 扫库正在重建列表，这时的数字半真半假
+            GameNow g = ReadGameNow();
+            nowStamp = DateTime.Now.ToString("HH:mm:ss");
+
+            lblNowNum.Text = g.On.ToString();
+            lblNowNum.ForeColor = g.On > 0 ? Theme.Ok : Theme.Ink3;
+            lblNowUnit.Text = Lang.S("个 MOD 正在游戏里启用");
+
+            int unk = treeView == null ? 0 : treeView.Unmatched;
+            if (g.Installed == 0)
+                lblNowSub.Text = Lang.S("游戏 addons 里还没读到 MOD");
+            else
+                lblNowSub.Text = Lang.F("游戏 addons：{0} 个 vpk · 开启 {1} · 关闭 {2}", g.Installed, g.On, g.Off)
+                    + (unk > 0 ? Lang.F(" · 未归类 {3}", g.Installed, g.On, g.Off, unk) : "");
+
+            // 和勾选比：差多少，差在哪边
+            int miss = 0, extra = 0;
+            foreach (string k in g.Keys) if (!checkedKeys.Contains(k)) miss++;
+            foreach (string k in checkedKeys) if (!g.Keys.Contains(k)) extra++;
+
+            if (g.Installed == 0)
+            {
+                lblNowState.ForeColor = Theme.Ink3;
+                lblNowState.Text = Lang.S("游戏里还没有 MOD：勾选按库里的来");
+            }
+            else if (miss == 0)
+            {
+                lblNowState.ForeColor = Theme.Ok;
+                lblNowState.Text = Lang.F("✓ 勾选和游戏一致（{0} 个都勾着）", g.On)
+                    + (extra > 0 ? Lang.F("，另勾了 {0} 个还没装的", extra) : "");
+            }
+            else
+            {
+                lblNowState.ForeColor = Theme.Warn;
+                lblNowState.Text = Lang.F("游戏里有 {0} 个没勾上", miss)
+                    + (extra > 0 ? Lang.F("，另勾了 {0} 个还没装的", extra) : "")
+                    + Lang.S("（点「按游戏现状回填」）");
+            }
+
+            // 分类分布：窗口拉高时这块竖向会长，一行一类，把它填满；
+            // 也顺手说清「这批都改了什么」，不用去树里数。放不下的按高度截断并注明还剩几类。
+            if (lblNowCats != null)
+            {
+                StringBuilder sb = new StringBuilder();
+                if (g.Installed == 0)
+                {
+                    sb.Append(Lang.S("游戏目录里没有可读的 MOD（选错目录的话先在上面改正）"));
+                }
+                else
+                {
+                    List<KeyValuePair<string, int>> cs = new List<KeyValuePair<string, int>>();
+                    foreach (string c in Catalog.Cats)
+                    {
+                        int n;
+                        if (g.Cats.TryGetValue(c, out n) && n > 0) cs.Add(new KeyValuePair<string, int>(c, n));
+                    }
+                    cs.Sort(delegate(KeyValuePair<string, int> a, KeyValuePair<string, int> b) { return b.Value.CompareTo(a.Value); });
+                    sb.Append(Lang.S("正在用的这些改了什么："));
+                    int room = Math.Max(0, nowCatRows - 1);      // 头一行被标题占了
+                    for (int i = 0; i < cs.Count && i < room; i++)
+                        sb.Append("\r\n").Append(Lang.S(cs[i].Key)).Append("  ").Append(cs[i].Value);
+                    if (cs.Count > room)
+                        sb.Append("\r\n").Append(Lang.F("…还有 {0} 类", cs.Count - room));
+                    else if (room - cs.Count >= 3)
+                        sb.Append("\r\n\r\n").Append(Lang.S("在游戏里改过开关或新订阅了东西，点上面「刷新」重读一遍"));
+                }
+                lblNowCats.Text = sb.ToString();
+            }
+
+            lblNowFoot.Text = Lang.F("刷新于 {0} · 读 addons + addonlist.txt", nowStamp);
+        }
+
+        /// <summary>
+        /// 启动 / 切游戏目录 / 切工作模式之后统一走这里：
+        /// 只要一条勾选都对不上（换了机器、库不在、勾的全是别的机器上的 key），就按游戏现状回填一次。
+        /// </summary>
+        private void AutoSeedIfNeeded(string when)
+        {
+            if (!Core.Cfg.AutoSync) return;
+            if (Selected().Count > 0) return;
+            int n = SeedChecksFromGame(false);
+            if (n > 0)
+                Core.Log("OK", "自动回填（" + when + "）：游戏里正在用 " + n + " 个 MOD，已勾上（不想要可在左栏关掉「启动时自动回填」）");
+            else if (n == 0)
+                Core.Log("INFO", "自动回填（" + when + "）：addons 里的 MOD 在 addonlist.txt 里全是关的，没有可勾的");
+        }
+
+        /// <summary>把游戏里正在用的那批写进勾选。返回填了几个；-1 = 游戏里一个都没读到，没动。</summary>
+        private int SeedChecksFromGame(bool save)
+        {
+            GameNow g = ReadGameNow();
+            if (g.Installed <= 0) return -1;
+            checkedKeys.Clear();
+            foreach (string k in g.Keys) checkedKeys.Add(k);
+            SyncPicks();
+            if (save)
+            {
+                Core.Cfg.Mods = new List<string>(checkedKeys);
+                Core.SaveConfig();
+            }
+            RefreshGameNow();
+            return g.Keys.Count;
+        }
+
+        /// <summary>
+        /// 只重读 left4dead2\addonlist.txt（几 KB，比整库重扫快两个数量级），
+        /// 把每条的 1/0 刷回内存里的已装条目。不写任何文件 —— 用户可能刚在游戏里调过开关。
+        /// </summary>
+        private int RereadAddonList()
+        {
+            string root = txtGame == null ? "" : txtGame.Text.Trim();
+            if (!Core.TestGame(root)) return -1;
+            Dictionary<string, bool> st = AddonList.Read(root);
+            int n = 0;
+            List<ModItem> list = Core.ModList;
+            if (list == null) return 0;
+            foreach (ModItem m in list)
+            {
+                if (m == null || !(m.FromGame || m.Installed)) continue;
+                bool on;
+                m.AddonOn = !st.TryGetValue(m.Name, out on) || on;   // 没登记 = 游戏默认启用
+                n++;
+            }
+            return n;
+        }
+
+        private DateTime lastQuietSync = DateTime.MinValue;
+
+        /// <summary>
+        /// 回到窗口时顺手重读一次 addonlist.txt（只有几 KB，不动磁盘上任何东西）：
+        /// 用户在游戏里调过开关、退了游戏切回来，卡片和树上的「开 / 关」当场就是对的，
+        /// 不用记得去点「刷新」。勾选一律不动 —— 那是用户的选择，只能由「回填」明确改。
+        /// </summary>
+        private void QuietSyncAddonList()
+        {
+            if (initializing || scanning || Core.ScanInProgress) return;
+            if (OpGuard.Current != null) return;                      // 装机/还原在跑，别去碰状态
+            if ((DateTime.Now - lastQuietSync).TotalSeconds < 3) return;
+            lastQuietSync = DateTime.Now;
+            if (RereadAddonList() < 0) return;
+            if (treeView != null) treeView.SyncIfSame();
+            RefreshGameNow();
+        }
+
+        protected override void OnActivated(EventArgs e)
+        {
+            base.OnActivated(e);
+            QuietSyncAddonList();
+        }
+
+        /// <summary>「按游戏现状回填」：不动游戏里任何文件，只改界面上的勾选并记住。</summary>
+        private void DoSyncFromGame()
+        {
+            if (scanning) { SetStatus("正在扫库，扫完再回填"); return; }
+            RereadAddonList();                       // 先在游戏里调过开关的，这里当场对上
+            int n = SeedChecksFromGame(true);
+            if (n < 0)
+            {
+                SetStatus("游戏 addons 里还没认出 MOD，没得回填");
+                Core.Log("WARN", "回填跳过：游戏目录里没认出已装 MOD（目录不对？还是 addons 是空的？）");
+            }
+            else
+            {
+                SetStatus("已按游戏现状回填 " + n + " 个 MOD");
+                Core.Log("OK", "按游戏现状回填勾选：勾上 " + n + " 个（读 addons + addonlist.txt，没动任何文件）");
+            }
+            if (treeView != null) treeView.SyncIfSame();   // 开/关那一列跟着变
+            RefreshGameNow();
+        }
+
+        /// <summary>「刷新」：游戏外面被动过（工坊订阅、手拷 vpk、游戏里调过开关）时重读一遍。</summary>
+        private void DoRefreshGame()
+        {
+            if (scanning) { SetStatus("正在扫库，稍等一下"); return; }
+            btnNowRefresh.Enabled = false;
+            btnNowSync.Enabled = false;
+            try
+            {
+                Core.Log("INFO", "刷新游戏现状：重读 addons 和 addonlist.txt");
+                RescanMods();                        // 整库重扫（新订阅的 vpk 这时候才进得来）
+                RefreshConflicts(true);
+                AutoSeedIfNeeded("刷新");             // 勾选是空的才回填，别把人家挑好的覆盖掉
+            }
+            finally
+            {
+                btnNowRefresh.Enabled = true;
+                btnNowSync.Enabled = true;
+            }
+            RefreshGameNow();
         }
 
         /// <summary>诊断截图：把「读取中」的骨架占位截一张（--loadshot），确认扫光位置/排版在真机上成立。</summary>
@@ -2868,6 +3303,7 @@ namespace Installer
                     bar.Style = ProgressBarStyle.Blocks;
                     RefreshMods();
                     RefreshConflicts(true);
+                    AutoSeedIfNeeded("换游戏目录");   // 新目录＝另一套 addons，勾选自然要跟着换
                     if (treeView != null) RebuildViews();
                     SetStatus(err == null ? "就绪" : "目录已切换，但重扫失败；请看日志");
                     if (err == null) lblStatus.ForeColor = Theme.Ink2;
@@ -3622,6 +4058,43 @@ namespace Installer
                 gLog.Height = Dpi.S(logOpen ? logH : 0);
                 gLog.Visible = drawerOpen && logOpen;
                 txtLog.Height = Dpi.S(logOpen ? Math.Max(60, logH - 34) : 0);
+
+                // 「游戏现状」和日志抢同一块地：日志收起时它填满下半屏（以前这儿是纯留白），
+                // 日志展开就整块让给日志 —— 两者互斥，不做上下叠。
+                if (gNow != null)
+                {
+                    int nowH = Math.Max(0, infoTop - Theme.S - logTop);
+                    // 自定义 Visible 判断，别用 gNow.Visible 取反判断：窗体还没显示时
+                    // 控件的 Visible 读出来恒为 false（父级不可见），下面的子控件排版就会被整段跳过。
+                    bool showNow = drawerOpen && !logOpen && nowH >= 96;
+                    gNow.Top = Dpi.S(logTop);
+                    gNow.Height = Dpi.S(showNow ? nowH : 0);
+                    gNow.Width = Dpi.S(leftW);
+                    gNow.Visible = showNow;
+                    if (showNow)
+                    {
+                        // 卡片的排版：数字和结论贴顶，分类分布占中间（窗口越高它越长），
+                        // 两个按钮和「刷新于 …」钉在卡片底部 —— 无论窗口多高，中间都不会留一大块白。
+                        int btnTop = Math.Max(106, nowH - 62);
+                        int footTop = nowH - 26;
+                        btnNowSync.Top = Dpi.S(btnTop);
+                        btnNowRefresh.Top = Dpi.S(btnTop);
+                        chkAutoSync.Top = Dpi.S(btnTop + 2);
+                        lblNowFoot.Top = Dpi.S(footTop);
+                        lblNowFoot.Width = Dpi.S(leftW - 24);
+                        int catsH = btnTop - 10 - 106;
+                        lblNowCats.Top = Dpi.S(106);
+                        lblNowCats.Height = Dpi.S(Math.Max(0, catsH));
+                        lblNowCats.Visible = catsH >= 34;
+                        // 高度变了就要重排「分类分布」的行数：多出来的行数是白给的空间，少了会截断
+                        int rows = Math.Max(1, catsH / 17);
+                        if (rows != nowCatRows) { nowCatRows = rows; RefreshGameNow(); }
+                        lblNowUnit.Width = Dpi.S(leftW - 24 - 62);
+                        lblNowSub.Width = Dpi.S(leftW - 24);
+                        lblNowState.Width = Dpi.S(leftW - 24);
+                        chkAutoSync.Width = Dpi.S(leftW - 224 - 12);
+                    }
+                }
 
                 // 底部动作区同理：Anchor 只在「距底多远」这一维上跟，自检里连着改几档尺寸时
                 // 会一路漂（窗口缩回 900 却还停在 200% 的位置），所以每次按设计值钉死。
@@ -4556,6 +5029,8 @@ namespace Installer
             public List<string> Platform = new List<string>();
             /// <summary>覆盖安装前快照下来的旧版本（"文件名|装机快照\事务\文件名"），取消/还原时按它回填。</summary>
             public List<string> Backups = new List<string>();
+            /// <summary>这次写进 bin\neko\plugins 的独占插件文件（相对游戏根的路径），还原清单用。</summary>
+            public List<string> Plugins = new List<string>();
             /// <summary>addonlist 的开关是否已经写入（取消时别把已写好的开关又改掉）。</summary>
             public bool SwitchesWritten;
             public int StepDone, StepTotal;
@@ -4638,9 +5113,40 @@ namespace Installer
                 finally { SetBusy(false); }
             }
 
+            // 带插件组件的包（CFX 那类）：先确认加载器在。
+            // 不在的话插件根本不会被加载，进游戏是空手 —— 不崩、不报错，最难查，所以要在装之前说清楚。
+            List<PluginPack> pluginPacks = new List<PluginPack>();
+            foreach (ModItem it in j.Sel)
+            {
+                ModGroup g;
+                if (it.GroupKey == null || !Catalog.GroupByKey.TryGetValue(it.GroupKey, out g)) continue;
+                if (g != null && g.Plugin != null && !pluginPacks.Contains(g.Plugin)) pluginPacks.Add(g.Plugin);
+            }
+            if (pluginPacks.Count > 0 && !j.L4N)
+            {
+                bool hasLoader = false;
+                try { hasLoader = File.Exists(Path.Combine(root, "bin\\left4neko.dll")); } catch { }
+                if (!hasLoader)
+                {
+                    string tip = "这套里有 " + pluginPacks.Count + " 个 MOD 带插件组件，要写进 bin\\neko\\plugins。\r\n\r\n"
+                        + "但游戏目录下没有 bin\\left4neko.dll（L4N 加载器）—— 插件不会被加载，\r\n"
+                        + "进游戏只会看到空手，不崩也不报错。\r\n\r\n"
+                        + "· 是：先停下，回去把左上「环境组件」里的 L4N 勾上\r\n"
+                        + "· 否：照装（模型能用，插件等你自己补上 L4N 之后才生效）";
+                    if (MessageBox.Show(tip, "这套 MOD 要 L4N", MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1) == DialogResult.Yes)
+                    {
+                        SetStatus("已暂停 · 先勾上 L4N 再装");
+                        return null;
+                    }
+                    Core.Log("WARN", "用户选择在缺 L4N 的情况下继续装插件组件");
+                }
+            }
+
             // 装之前先看目标盘放不放得下
             long need = 0;
             foreach (ModItem it in j.Sel) need += it.Size;
+            foreach (PluginPack pk in pluginPacks) need += pk.Size;
             try
             {
                 DriveInfo di = new DriveInfo(Path.GetPathRoot(root));
@@ -4861,6 +5367,37 @@ namespace Installer
                 if (finalFailed > 0) j.Failed.Add("MOD 复制（" + finalFailed + " 个）");
             }
 
+            // 插件组件（bin\neko\plugins）：vpk 铺完之后跟着装。
+            // 顺序有讲究 —— 放在 vpk 后面，中途停下时最坏情况是「插件没装、模型装了」，
+            // 而不是「插件装了、模型没装」；后者进游戏是两把枪叠在一起，更难收拾。
+            if (!j.Canceled && j.Sel.Count > 0)
+            {
+                List<PluginPack> packs = new List<PluginPack>();
+                foreach (ModItem it in j.Sel)
+                {
+                    ModGroup g;
+                    if (it.GroupKey == null || !Catalog.GroupByKey.TryGetValue(it.GroupKey, out g)) continue;
+                    if (g != null && g.Plugin != null) packs.Add(g.Plugin);
+                }
+                if (packs.Count > 0)
+                {
+                    Core.Log("STEP", "铺插件组件（" + packs.Count + " 套）");
+                    SetStatus("正在装插件组件…");
+                    Work.PluginResult pr = new Work.PluginResult();
+                    Work.CopyPlugins(j.Root, packs, delegate(long done, long total)
+                    {
+                        if (total > 0) SetBar((int)(done * 1000 / total));
+                    }, pr);
+                    if (pr.Written.Count > 0) j.Plugins.AddRange(pr.Written);
+                    // 快照和 addons 的混在一个列表里：还原时按「带不带目录分隔符」分派，不用两套记录
+                    if (pr.Backups.Count > 0) j.Backups.AddRange(pr.Backups);
+                    if (pr.Failed.Count > 0) j.Failed.Add("插件组件（" + pr.Failed.Count + " 个文件没写进去）");
+                    if (pr.SharedWritten.Count > 0)
+                        Core.Log("INFO", "共用框架写了 " + pr.SharedWritten.Count + " 个文件（还原时保留）");
+                    if (Work.CancelRequested) { j.Canceled = true; return; }
+                }
+            }
+
             // 停止时不改 addonlist：已经复制完的文件先留在 addons 里，但不把它们突然启用。
             if (j.Canceled) return;
             if (j.Swap)
@@ -4885,41 +5422,53 @@ namespace Installer
         private void ReportInstallCanceled(InstallJob j)
         {
             int copied = j == null ? 0 : j.Added.Count;
-            SetStatus(copied > 0 ? "已停止 · 已复制文件待处理" : "已停止 · 后续步骤未继续");
-            Core.Log("WARN", "安装已停止：没有继续后续步骤；已写入的 " + copied + " 个 MOD 文件保留。");
+            int plug = j == null ? 0 : j.Plugins.Count;
+            SetStatus(copied > 0 || plug > 0 ? "已停止 · 已复制文件待处理" : "已停止 · 后续步骤未继续");
+            Core.Log("WARN", "安装已停止：没有继续后续步骤；已写入的 " + copied + " 个 MOD 文件、"
+                + plug + " 个插件文件保留。");
             SafeBeginInvoke(delegate()
             {
-                if (j != null && (j.Added.Count > 0 || j.Platform.Count > 0 || j.Backups.Count > 0))
+                if (j != null && (j.Added.Count > 0 || j.Platform.Count > 0 || j.Backups.Count > 0 || j.Plugins.Count > 0))
                 {
                     // 先把本次写的记进还原清单：不管用户选删还是留，都不至于变成“谁都找不到”的孤儿文件。
-                    Work.WriteManifest(j.Root, j.Added, j.Platform, j.Backups);
+                    Work.WriteManifest(j.Root, j.Added, j.Platform, j.Backups, j.Plugins);
                 }
-                if (j != null && j.Added.Count > 0)
+                if (j != null && (j.Added.Count > 0 || j.Plugins.Count > 0))
                 {
                     bool remove = MessageBox.Show(
                         "安装已停止。\r\n\r\n"
                         + "· 已经复制完的 " + j.Added.Count + " 个 MOD 文件还在游戏目录里\r\n"
+                        + (j.Plugins.Count > 0
+                            ? "· " + j.Plugins.Count + " 个插件文件已经写进 bin\\neko\\plugins\r\n" : "")
                         + "· 后续组件没有继续安装\r\n\r\n"
-                        + "要现在删掉这 " + j.Added.Count + " 个文件吗？\r\n"
-                        + "选「是」会删掉本次复制的文件，并把被覆盖的旧版本放回去；\r\n"
-                        + "选「否」会保留文件、记入还原清单，并把它们的开关先设为关闭。",
+                        + "要现在删掉这些文件吗？\r\n"
+                        + "选「是」会删掉本次复制的文件，并把被覆盖的旧版本放回去（共用框架会保留）；\r\n"
+                        + "选「否」会保留文件、记入还原清单，并把 MOD 的开关先设为关闭。",
                         "安装已停止",
                         MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
                         MessageBoxDefaultButton.Button2) == DialogResult.Yes;
                     if (remove)
                     {
                         List<string> cleared = Work.RemoveAddedFiles(j.Root, j.Added);
-                        // 覆盖安装的：把原来那一版放回 addons，才算真的回到装机前
+                        // 插件走自己的删除（还要收掉空目录），共用框架不在记录里，自然不会动
+                        int plugGone = plug > 0 ? Work.RemovePluginFiles(j.Root, j.Plugins) : 0;
+                        // 覆盖安装的：把原来那一版放回 addons / plugins，才算真的回到装机前
+                        List<string> addonBak = new List<string>();
+                        List<string> plugBak = new List<string>();
+                        SplitBackups(j.Backups, addonBak, plugBak);
                         List<string> rep = new List<string>();
-                        int back = Work.RestoreBackups(j.Root, j.Backups, rep);
+                        int back = Work.RestoreBackups(j.Root, addonBak, rep);
+                        int plugBack = Work.RestorePluginBackups(j.Root, plugBak);
                         Work.ForgetManifest(j.Root, cleared);
                         SetStatus("已停止 · 已删除本次复制 " + cleared.Count + " 个文件"
-                            + (back > 0 ? "，已放回 " + back + " 个旧版本" : ""));
-                        Core.Log("OK", "取消安装：删除本次复制 " + cleared.Count + " 个，回填旧版本 " + back + " 个");
+                            + (plugGone > 0 ? "、" + plugGone + " 个插件" : "")
+                            + (back + plugBack > 0 ? "，已放回 " + (back + plugBack) + " 个旧版本" : ""));
+                        Core.Log("OK", "取消安装：删除本次复制 " + cleared.Count + " 个、插件 " + plugGone
+                            + " 个，回填旧版本 " + (back + plugBack) + " 个");
                     }
                     else
                     {
-                        if (!j.SwitchesWritten)
+                        if (!j.SwitchesWritten && j.Added.Count > 0)
                         {
                             Dictionary<string, bool> off = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
                             foreach (string n in j.Added) off[n] = false;
@@ -4927,7 +5476,8 @@ namespace Installer
                             catch (Exception ex) { Core.Log("WARN", "取消安装后关闭开关失败: " + ex.Message); }
                         }
                         SetStatus("已停止 · 文件已保留，可在「一键还原」里清理");
-                        Core.Log("WARN", "取消安装：本次复制的 " + j.Added.Count + " 个文件已记入还原清单"
+                        Core.Log("WARN", "取消安装：本次复制的 " + j.Added.Count + " 个文件、"
+                            + j.Plugins.Count + " 个插件已记入还原清单"
                             + (j.SwitchesWritten ? "（开关已写入，未改动）" : "，开关先设为关闭"));
                     }
                 }
@@ -4948,12 +5498,24 @@ namespace Installer
             });
         }
 
+        /// <summary>快照清单按「带不带目录分隔符」分两拨：addons 的按文件名回填，bin 下的按相对路径回填。</summary>
+        private static void SplitBackups(List<string> backups, List<string> addonBak, List<string> plugBak)
+        {
+            if (backups == null) return;
+            foreach (string line in backups)
+            {
+                int bar = (line ?? "").IndexOf('|');
+                string nm = bar > 0 ? line.Substring(0, bar).Trim() : (line ?? "").Trim();
+                if (nm.IndexOfAny(new char[] { '\\', '/' }) >= 0) plugBak.Add(line); else addonBak.Add(line);
+            }
+        }
+
         /// <summary>核对、写还原清单、把结果告诉用户。</summary>
         private void FinishInstall(InstallJob j)
         {
             Core.Log("STEP", "逐项核对");
             Work.Verify(j.Root, j.Platform);
-            Work.WriteManifest(j.Root, j.Added, j.Platform, j.Backups);
+            Work.WriteManifest(j.Root, j.Added, j.Platform, j.Backups, j.Plugins);
             if (j.Failed.Count == 0)
             {
                 SetStatus("完成");

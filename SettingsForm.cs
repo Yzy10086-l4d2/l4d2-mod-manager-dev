@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -27,9 +27,9 @@ namespace Installer
         private readonly MainForm owner;
         private Segmented segMode, segAppearance, segLang;
         private Toggle tglMotion;
-        private ComboBox cboGame, cboLibDrive;
+        private ComboBox cboGame, cboLibDrive, cboPkg;
         private FlatButton btnGameBrowse, btnGameFind, btnLibBrowse, btnLibManage, btnSave;
-        private Label lblGameState, lblLibMain, lblLibExtra, lblLibHint, lblCfg, lblLog, lblLocalOnly;
+        private Label lblGameState, lblLibMain, lblLibExtra, lblLibHint, lblCfg, lblLog, lblLocalOnly, lblPkgState;
         private string pendingRoot;
         private bool syncing = true;
 
@@ -63,7 +63,7 @@ namespace Installer
 
             Text = Lang.S("设置 · L4D2 MOD 管理工具");
             Theme.UseDpi(this);
-            ClientSize = Dpi.Sz(620, 790);
+            ClientSize = Dpi.Sz(620, 856);
             Font = Theme.UI;
             BackColor = Theme.Bg;
             ForeColor = Theme.Ink;
@@ -91,6 +91,7 @@ namespace Installer
             syncing = false;
             SyncModeState();
             UpdateGameState();
+            UpdatePkgState();
 
             Load += delegate { Theme.ApplyChrome(this); };
             Shown += delegate { Theme.ApplyChrome(this); Theme.DeepNative(this); };
@@ -228,6 +229,56 @@ namespace Installer
             s.Controls.Add(segLang);
         }
 
+        /// <summary>输入框里的组件包目录（空 = 自动找）。</summary>
+        internal string WantPkgRoot
+        {
+            get
+            {
+                if (cboPkg == null) return "";
+                return cboPkg.Text.Trim().Trim('"').TrimEnd('\\');
+            }
+        }
+
+        /// <summary>只读提示：留空时把「自动会用到哪个目录」写出来，填了就报里面有没有组件包。</summary>
+        private void UpdatePkgState()
+        {
+            if (lblPkgState == null) return;
+            string want = WantPkgRoot;
+            string dir = want;
+            if (dir.Length == 0)
+            {
+                dir = Core.ResolvePkgRoot();
+                lblPkgState.Text = Lang.F("留空 = 自动找 → {0}", dir);
+            }
+            else if (!Directory.Exists(dir))
+            {
+                lblPkgState.ForeColor = Theme.Accent;
+                lblPkgState.Text = Lang.S("这个目录不存在，保存会被拦下；留空则自动查找");
+                return;
+            }
+            else lblPkgState.Text = Lang.F("使用：{0}", dir);
+
+            bool hasPkg = Directory.Exists(Path.Combine(dir, "L4N平台"))
+                       || Directory.Exists(Path.Combine(dir, "防闪退"))
+                       || Directory.Exists(Path.Combine(dir, "Skeeto"))
+                       || Directory.Exists(Path.Combine(dir, "MQCam"));
+            lblPkgState.ForeColor = hasPkg ? Theme.Ink3 : Theme.Accent;
+            if (!hasPkg) lblPkgState.Text += Lang.S("（没看到 L4N平台 / Skeeto / MQCam / 防闪退）");
+        }
+
+        private void BrowsePkgRoot()
+        {
+            using (FolderBrowserDialog d = new FolderBrowserDialog())
+            {
+                d.Description = "选择组件包目录（里面有 L4N平台 / Skeeto / MQCam / 防闪退 的那一层）";
+                string cur = WantPkgRoot;
+                if (cur.Length == 0) cur = Core.ResolvePkgRoot();
+                if (Directory.Exists(cur)) d.SelectedPath = cur;
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                cboPkg.Text = d.SelectedPath.TrimEnd('\\');
+            }
+        }
+
         /// <summary>
         /// 游戏目录：两种模式共用。U 盘模式决定装到哪，本地模式还额外决定扫哪里，
         /// 所以单独成组，不再只藏在主界面顶部那一行。
@@ -323,7 +374,7 @@ namespace Installer
 
         private void BuildDiagnostics()
         {
-            Card s = AddGroup(Lang.S("位置与诊断"), 604, 98);
+            Card s = AddGroup(Lang.S("位置与诊断"), 604, 160);
 
             lblCfg = new Label();
             lblCfg.SetBounds(16, 8, 548, 16);
@@ -341,28 +392,57 @@ namespace Installer
             lblLog.Text = Lang.F("日志：{0}", Core.LogDir);
             s.Controls.Add(lblLog);
 
-            s.Separate(50);
+            // 组件包目录：L4N / Skeeto / MQCam / dxvk 这些不在 exe 里，得指到它们所在的那一层。
+            // 以前只认「exe 就在包里」这一种摆法 —— exe 放桌面/下载目录时，包明明在 D 盘也判「缺」。
+            RowTitle(s, Lang.S("组件包目录"), 16, 44, 220);
 
-            FlatButton openCfg = SoftButton(s, Lang.S("打开配置文件夹"), 16, 58, 124, 24);
+            cboPkg = new ComboBox();
+            cboPkg.SetBounds(16, 64, 300, 24);
+            cboPkg.DropDownStyle = ComboBoxStyle.DropDown;
+            Theme.Dress(cboPkg);
+            // 输入框只放配置里手填的值：留空 = 自动找。把自动结果直接填进框看着直观，
+            // 但用户什么都不改点一次「保存设置」，就会把「自动」固化成一个写死的路径 ——
+            // 以后组件包挪了位置，反而再也找不到。
+            cboPkg.Text = Core.Cfg.PkgRoot ?? "";
+            cboPkg.TextChanged += delegate { if (!syncing) UpdatePkgState(); };
+            s.Controls.Add(cboPkg);
+
+            FlatButton brows = SoftButton(s, "浏览…", 322, 64, 64, 24);
+            brows.Click += delegate { BrowsePkgRoot(); UpdatePkgState(); };
+
+            // 「自动找」= 清空输入框回到自动，下面那行会立刻显示这回实际找到哪
+            FlatButton auto = SoftButton(s, Lang.S("自动找"), 390, 64, 64, 24);
+            auto.Click += delegate { cboPkg.Text = ""; UpdatePkgState(); };
+
+            lblPkgState = new Label();
+            lblPkgState.SetBounds(16, 90, 548, 16);
+            lblPkgState.Font = Theme.UISmall;
+            lblPkgState.ForeColor = Theme.Ink3;
+            lblPkgState.AutoEllipsis = true;
+            s.Controls.Add(lblPkgState);
+
+            s.Separate(112);
+
+            FlatButton openCfg = SoftButton(s, Lang.S("打开配置文件夹"), 16, 118, 124, 24);
             openCfg.Click += delegate { OpenConfigFolder(); };
 
-            FlatButton openLog = SoftButton(s, Lang.S("打开日志"), 148, 58, 84, 24);
+            FlatButton openLog = SoftButton(s, Lang.S("打开日志"), 148, 118, 84, 24);
             openLog.Click += delegate { OpenFolder(Core.LogDir); };
 
-            FlatButton env = SoftButton(s, Lang.S("环境自检"), 240, 58, 88, 24);
+            FlatButton env = SoftButton(s, Lang.S("环境自检"), 240, 118, 88, 24);
             env.Click += delegate { if (owner != null) owner.ShowEnv(); };
         }
 
         private void BuildFooter()
         {
             Panel rule = new Panel();
-            rule.SetBounds(20, 676, 580, 1);
+            rule.SetBounds(20, 798, 580, 1);
             rule.BackColor = Theme.Line;
             Controls.Add(rule);
 
             Label note = new Label();
             note.Text = Lang.S("保存后立即生效，不改已经装进游戏的文件。");
-            note.SetBounds(20, 682, 360, 20);
+            note.SetBounds(20, 804, 360, 20);
             note.Font = Theme.UISmall;
             note.ForeColor = Theme.Ink3;
             note.BackColor = Color.Transparent;
@@ -371,13 +451,13 @@ namespace Installer
             FlatButton cancel = new FlatButton();
             cancel.Text = Lang.S("取消");
             cancel.Plain = true;
-            cancel.SetBounds(408, 682, 88, 32);
+            cancel.SetBounds(408, 804, 88, 32);
             cancel.DialogResult = DialogResult.Cancel;
             Controls.Add(cancel);
 
             btnSave = new FlatButton();
             btnSave.Text = Lang.S("保存设置");
-            btnSave.SetBounds(504, 742, 96, 32);
+            btnSave.SetBounds(504, 804, 96, 32);
             btnSave.Primary = true;
             btnSave.DialogResult = DialogResult.OK;
             // 校验放进点击里：以前是「先关窗、再在 ShowSettings 里发现路径不对」，
@@ -408,6 +488,10 @@ namespace Installer
             string game = WantGameRoot;
             if (game.Length > 0 && !Core.TestGame(game))
                 return "这个目录里没有 left4dead2.exe，设置没有保存：\r\n" + game;
+            string pkg = WantPkgRoot;
+            if (pkg.Length > 0 && !Directory.Exists(pkg))
+                return "组件包目录不存在，设置没有保存：\r\n" + pkg
+                     + "\r\n\r\n留空表示自动查找。";
             return null;
         }
 
@@ -822,6 +906,18 @@ namespace Installer
                         return;
                     }
                     Core.Log("OK", "MOD 主库改为：" + Core.ModRoot);
+                }
+
+                // 组件包目录：改了要立刻重查一遍，否则左栏还按旧目录判「缺」
+                string newPkg = f.WantPkgRoot;
+                string oldPkg = Core.Cfg.PkgRoot ?? "";
+                if (!string.Equals(newPkg, oldPkg, StringComparison.OrdinalIgnoreCase))
+                {
+                    Core.Cfg.PkgRoot = newPkg;
+                    Core.SaveConfig();
+                    Core.PkgRoot = Core.ResolvePkgRoot();
+                    Core.Log("OK", "组件包目录改为：" + Core.PkgRoot);
+                    RefreshPackStatus();
                 }
 
                 if (newMotion != oldMotion)

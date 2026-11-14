@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -129,8 +129,8 @@ namespace Installer
 
         public static bool InstallL4N(string gameRoot, Action<int, int> progress)
         {
-            string zip = Core.FirstFile(Core.PkgDir, "L4N_v*.zip");
-            string dir = Path.Combine(Core.PkgDir, "L4N平台\\L4N");
+            string zip = Core.FirstFile(Core.PkgRoot, "L4N_v*.zip");
+            string dir = Path.Combine(Core.PkgRoot, "L4N平台\\L4N");
             try
             {
                 CopyStat st;
@@ -195,7 +195,7 @@ namespace Installer
         {
             try
             {
-                string srcDir = Path.Combine(Core.PkgDir, "防闪退");
+                string srcDir = Path.Combine(Core.PkgRoot, "防闪退");
                 foreach (string n in new string[] { "d3d9.dll", "dxvk.conf" })
                 {
                     string s = Path.Combine(srcDir, n);
@@ -213,8 +213,8 @@ namespace Installer
         // ---------- Skeeto ----------
         public static bool InstallSkeeto(string gameRoot)
         {
-            string ps1 = Path.Combine(Core.PkgDir, "Skeeto\\Skeeto\\Skeeto\\Maintain.ps1");
-            string dir = Path.Combine(Core.PkgDir, "Skeeto\\Skeeto");
+            string ps1 = Path.Combine(Core.PkgRoot, "Skeeto\\Skeeto\\Skeeto\\Maintain.ps1");
+            string dir = Path.Combine(Core.PkgRoot, "Skeeto\\Skeeto");
             string dll = Path.Combine(gameRoot, "skeeto.dll");
             bool already = File.Exists(dll);
             if (already && !Overwrite)
@@ -306,7 +306,7 @@ namespace Installer
         {
             try
             {
-                string payload = Path.Combine(Path.Combine(Core.PkgDir, "Skeeto\\Skeeto"), "skeeto.dll");
+                string payload = Path.Combine(Path.Combine(Core.PkgRoot, "Skeeto\\Skeeto"), "skeeto.dll");
                 if (!File.Exists(payload)) return false;
                 string a = Core.HashOf(dll), b = Core.HashOf(payload);
                 return a != null && b != null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
@@ -317,7 +317,7 @@ namespace Installer
         // ---------- 素材包 ----------
         public static string InstallAssetPack(string gameRoot)
         {
-            string vpk = Core.FirstFile(Path.Combine(Core.PkgDir, "Skeeto\\素材包"), "*.vpk");
+            string vpk = Core.FirstFile(Path.Combine(Core.PkgRoot, "Skeeto\\素材包"), "*.vpk");
             if (vpk == null) { Core.Log("FAIL", "找不到素材包 vpk"); return null; }
             string addons = Path.Combine(Path.Combine(gameRoot, "left4dead2"), "addons");
             if (!Directory.Exists(addons)) Directory.CreateDirectory(addons);
@@ -354,7 +354,7 @@ namespace Installer
         // ---------- MQCam ----------
         public static bool InstallMqcam(string gameRoot)
         {
-            string dir = Path.Combine(Core.PkgDir, "MQCam\\MQCam");
+            string dir = Path.Combine(Core.PkgRoot, "MQCam\\MQCam");
             string tool = Path.Combine(dir, "mqcore_package_tool.exe");
             string manifest = Path.Combine(dir, "payload.sha256");
             string dll = Path.Combine(Path.Combine(Path.Combine(gameRoot, "bin"), "neko"), "mqcore\\mqcam.dll");
@@ -447,7 +447,7 @@ namespace Installer
         {
             try
             {
-                string clean = Path.Combine(Core.PkgDir, "MQCam\\mqcam_state_clean.ini");
+                string clean = Path.Combine(Core.PkgRoot, "MQCam\\mqcam_state_clean.ini");
                 string dst = Path.Combine(Path.Combine(Path.Combine(gameRoot, "bin\\neko"), "mqcore"), "mqcam_state.ini");
                 if (!File.Exists(clean)) { Core.Log("WARN", "没有 mqcam_state_clean.ini，跳过相机归零"); return; }
                 if (!Directory.Exists(Path.GetDirectoryName(dst))) return;
@@ -771,6 +771,222 @@ namespace Installer
                 ? ("MOD: 覆盖重写 " + c + " 个（并行 " + degree + " 路" + (Core.StrictVerify ? " + 全量 SHA256" : " + 大小校验") + "），同名去重跳过 " + s + " 个，" + tail)
                 : ("MOD: 新装 " + c + " 个（并行 " + degree + " 路" + (Core.StrictVerify ? " + 全量 SHA256" : " + 大小校验") + "），已装跳过 " + s + " 个，" + tail));
             return total;
+        }
+
+        // ---------- 插件组件：bin\neko\plugins ----------
+        // 有些 MOD 除了 vpk 还带一套 DLL（CFX 渲染框架 + 这把枪的插件），要落到
+        // <游戏>\bin\neko\plugins 才显示得出来。缺一个 DLL 的结果是「手上空的」——不崩、不报错，
+        // 所以这一段必须和 vpk 一样：写入前快照、写完记录、能回滚。
+
+        /// <summary>一次插件安装的账：写进去哪些、跳过哪些、失败哪些、覆盖了哪些旧文件。</summary>
+        public sealed class PluginResult
+        {
+            /// <summary>本次真正写进去的「独占」文件，相对游戏根的路径。还原时按它删。</summary>
+            public List<string> Written = new List<string>();
+            /// <summary>本次写进去的「共用框架」文件。还原时保留（别的插件还在用）。</summary>
+            public List<string> SharedWritten = new List<string>();
+            /// <summary>没动过的（已装的 / 框架版本不同的），只进日志。</summary>
+            public List<string> Skipped = new List<string>();
+            public List<string> Failed = new List<string>();
+            /// <summary>覆盖前的旧版本快照，每项 "相对路径|装机快照\事务\plugins\相对路径"。</summary>
+            public List<string> Backups = new List<string>();
+        }
+
+        /// <summary>
+        /// 铺插件。落点 bin\neko\plugins，源目录里的相对结构原样保留。
+        ///
+        /// 三种情况的处理刻意不一样：
+        ///   · 同名同大小       → 已装，跳过（和 vpk 那套判定一致，不重复搬）
+        ///   · 同名不同大小     → 独占的覆盖（先快照，能回滚）；共用的保留现有版本并警告
+        ///                        共用框架是多个 CFX 包一起用的，后装的静默降级别人就哑了
+        ///   · 不存在           → 写入
+        /// 覆盖重装（Overwrite=true）时，共用框架也照包里那份覆盖。
+        /// </summary>
+        public static long CopyPlugins(string gameRoot, List<PluginPack> packs, Action<long, long> progress, PluginResult r)
+        {
+            if (r == null) r = new PluginResult();
+            if (packs == null || packs.Count == 0) return 0;
+
+            string txn = DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 4);
+            long total = 0, done = 0;
+            // 同一个插件目录可能被两个套装同时认出来（模型 vpk 和音效 vpk 被拆成两组），这里先去重
+            List<PluginPack> uniq = new List<PluginPack>();
+            HashSet<string> seenPack = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (PluginPack p in packs)
+            {
+                if (p == null || !seenPack.Add(p.Key)) continue;
+                uniq.Add(p);
+                total += p.Size;
+            }
+            if (progress != null) progress(0, total);
+
+            int wrote = 0, skipped = 0, failed = 0, replug = 0;
+            foreach (PluginPack p in uniq)
+            {
+                Core.Log("STEP", "铺插件「" + p.Name + "」" + PluginKit.Describe(p));
+                foreach (PluginFile f in p.Files)
+                {
+                    if (CancelRequested) { done += f.Size; continue; }
+                    string dst = Path.Combine(gameRoot, f.Rel);
+                    if (!Core.IsUnder(gameRoot, dst))
+                    {
+                        failed++;
+                        Core.Log("FAIL", "插件路径越界，已跳过: " + f.Rel);
+                        done += f.Size;
+                        continue;
+                    }
+                    long have = -1;
+                    try { if (File.Exists(dst)) have = new FileInfo(dst).Length; }
+                    catch { have = -1; }
+
+                    if (have == f.Size) { skipped++; done += f.Size; continue; }   // 同名同大小 = 已装
+
+                    if (have >= 0 && f.Shared && !Overwrite)
+                    {
+                        skipped++;
+                        Core.Log("WARN", "共用框架已存在且版本不同，保留现有版本: " + f.Rel
+                            + "（库里 " + Core.Human(f.Size) + "，现有 " + Core.Human(have)
+                            + "；要按包里这份覆盖，勾「覆盖重装」）");
+                        done += f.Size;
+                        continue;
+                    }
+
+                    string bak = have >= 0 ? SnapshotPlugin(gameRoot, f.Rel, txn) : null;
+                    string why;
+                    if (Core.CopyOneVerified(f.Src, dst, out why))
+                    {
+                        wrote++;
+                        if (f.Shared) r.SharedWritten.Add(f.Rel); else r.Written.Add(f.Rel);
+                        if (bak != null) { replug++; r.Backups.Add(f.Rel + "|" + bak); }
+                    }
+                    else
+                    {
+                        failed++;
+                        r.Failed.Add(f.Rel);
+                        Core.Log("FAIL", "插件写入失败 " + f.Rel + "：" + why);
+                    }
+                    done += f.Size;
+                    if (progress != null) progress(done, total);
+                }
+            }
+
+            Core.Log(failed > 0 ? "WARN" : "OK",
+                "插件: 写入 " + wrote + " 个文件（其中共用框架 " + r.SharedWritten.Count
+                + " 个、覆盖旧版本 " + replug + " 个），已装跳过 " + skipped + " 个"
+                + (failed > 0 ? "，失败 " + failed + " 个" : ""));
+            return total;
+        }
+
+        /// <summary>覆盖前把 bin 下的旧文件存进快照。返回相对 LogDir 的路径（失败返回 null）。</summary>
+        private static string SnapshotPlugin(string gameRoot, string rel, string txn)
+        {
+            try
+            {
+                string src = Path.Combine(gameRoot, rel);
+                if (!File.Exists(src)) return null;
+                string root = Path.Combine(Path.Combine(Core.LogDir, "装机快照"), txn);
+                string dst = Path.Combine(root, Path.Combine("plugins", rel));
+                string dir = Path.GetDirectoryName(dst);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                if (!File.Exists(dst)) Core.CopyOne(src, dst);
+                return Path.Combine(Path.Combine("装机快照", txn), Path.Combine("plugins", rel));
+            }
+            catch (Exception ex)
+            {
+                Core.Log("WARN", "插件覆盖前备份失败，这个文件回不去: " + rel + "，" + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>把插件快照放回游戏目录（取消安装 / 一键还原时用）。清单可能被手改，只认装机快照下面的。</summary>
+        public static int RestorePluginBackups(string gameRoot, List<string> backups)
+        {
+            if (backups == null || backups.Count == 0) return 0;
+            string baseDir = Path.GetFullPath(Path.Combine(Core.LogDir, "装机快照")).TrimEnd('\\') + "\\";
+            int n = 0;
+            foreach (string raw in backups)
+            {
+                string line = (raw ?? "").Trim();
+                if (line.Length == 0) continue;
+                int bar = line.IndexOf('|');
+                if (bar <= 0) continue;
+                string rel = line.Substring(0, bar).Trim();
+                string snap = line.Substring(bar + 1).Trim();
+                if (rel.Length == 0 || rel.IndexOf("..", StringComparison.Ordinal) >= 0) continue;
+                try
+                {
+                    string src = Path.GetFullPath(Path.Combine(Core.LogDir, snap));
+                    if (!src.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase)) continue;
+                    string dst = Path.Combine(gameRoot, rel);
+                    if (!Core.IsUnder(gameRoot, dst)) continue;
+                    if (!File.Exists(src)) { Core.Log("WARN", "插件旧版本快照不在了: " + snap); continue; }
+                    Core.CopyOne(src, dst);
+                    n++;
+                    try { File.Delete(src); } catch { }
+                }
+                catch (Exception ex) { Core.Log("WARN", "插件回填失败 " + rel + ": " + ex.Message); }
+            }
+            if (n > 0) Core.Log("OK", "已把 " + n + " 个插件文件放回原版本");
+            return n;
+        }
+
+        /// <summary>取消安装时用：删掉本次写进去的插件文件，再把被覆盖的旧版本放回去。</summary>
+        public static int RemovePluginFiles(string gameRoot, List<string> rels)
+        {
+            if (rels == null || rels.Count == 0) return 0;
+            int n = 0;
+            foreach (string rel in rels)
+            {
+                if (string.IsNullOrEmpty(rel) || rel.IndexOf("..", StringComparison.Ordinal) >= 0) continue;
+                string p = Path.Combine(gameRoot, rel);
+                if (!Core.IsUnder(gameRoot, p)) continue;
+                try
+                {
+                    if (File.Exists(p)) { File.Delete(p); n++; }
+                }
+                catch (Exception ex) { Core.Log("WARN", "删除插件文件失败 " + rel + ": " + ex.Message); }
+            }
+            PrunePluginDirs(gameRoot, rels);
+            return n;
+        }
+
+        /// <summary>
+        /// 删完插件文件，把 bin\neko\plugins 下面空掉的目录收掉。
+        /// 只删「比 plugins 更深」的空目录 —— plugins 本身和 CFX 这一层要留着，
+        /// 那是框架的地盘，删了别的插件就没地方落了。
+        /// </summary>
+        public static void PrunePluginDirs(string gameRoot, List<string> rels)
+        {
+            if (rels == null || rels.Count == 0) return;
+            string anchor = Path.GetFullPath(Path.Combine(gameRoot, PluginKit.Anchor)).TrimEnd('\\');
+            HashSet<string> dirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string rel in rels)
+            {
+                if (string.IsNullOrEmpty(rel)) continue;
+                try
+                {
+                    string full = Path.GetFullPath(Path.Combine(gameRoot, rel));
+                    string d = Path.GetDirectoryName(full);
+                    while (!string.IsNullOrEmpty(d) && d.Length > anchor.Length
+                           && d.StartsWith(anchor + "\\", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dirs.Add(d);
+                        d = Path.GetDirectoryName(d);
+                    }
+                }
+                catch { }
+            }
+            // 深的先删，删完上一层才可能变空
+            List<string> list = new List<string>(dirs);
+            list.Sort(delegate(string a, string b) { return b.Length.CompareTo(a.Length); });
+            foreach (string d in list)
+            {
+                try
+                {
+                    if (Directory.Exists(d) && Directory.GetFileSystemEntries(d).Length == 0) Directory.Delete(d);
+                }
+                catch { }
+            }
         }
 
         /// <summary>覆盖前把旧文件复制到 _装机记录\装机快照\&lt;事务&gt;\；返回相对 LogDir 的路径（失败返回 null）。</summary>
@@ -1280,7 +1496,9 @@ namespace Installer
             List<string> targets = new List<string>();
             // 本版本写的记录一定带 Schema；没有 Schema 行的就是 ≤2.58.1 留下的老记录。
             // 光看「Platform 为空」分不出这两种，会新记录当老记录处理、照包清单乱删。
-            bool precise = mine != null && mine.Schema >= ManifestSchema;
+            // 注意这里比的是 SchemaPlatform（2），不是当前的 ManifestSchema（3）：
+            // 2.6x 写的记录已经带组件明细，升到 3 加了插件明细，但组件那条语义没变。
+            bool precise = mine != null && mine.Schema >= SchemaPlatform;
             bool recorded = precise && mine.Platform.Count > 0;
             if (recorded)
             {
@@ -1295,10 +1513,10 @@ namespace Installer
                         targets.Add("dxvk.conf");
                     }
                     else if (string.Equals(c, "Skeeto", StringComparison.OrdinalIgnoreCase))
-                        targets.AddRange(PackageFiles(Path.Combine(Core.PkgDir, "Skeeto\\Skeeto")));
+                        targets.AddRange(PackageFiles(Path.Combine(Core.PkgRoot, "Skeeto\\Skeeto")));
                     else if (string.Equals(c, "Asset", StringComparison.OrdinalIgnoreCase))
                     {
-                        string vpk = Core.FirstFile(Path.Combine(Core.PkgDir, "Skeeto\\素材包"), "*.vpk");
+                        string vpk = Core.FirstFile(Path.Combine(Core.PkgRoot, "Skeeto\\素材包"), "*.vpk");
                         if (vpk != null) targets.Add("left4dead2\\addons\\" + Path.GetFileName(vpk));
                     }
                     else if (string.Equals(c, "Mqcam", StringComparison.OrdinalIgnoreCase))
@@ -1310,8 +1528,8 @@ namespace Installer
                 // 老记录：有本目录的清单，但没有 Schema/Platform 字段（升级前装的）。
                 // 分不清哪些组件是本工具装的，只能按包清单清理；删前逐个备份，备份失败就保留。
                 targets.AddRange(L4NFiles());
-                targets.AddRange(PackageFiles(Path.Combine(Core.PkgDir, "Skeeto\\Skeeto")));
-                string vpk = Core.FirstFile(Path.Combine(Core.PkgDir, "Skeeto\\素材包"), "*.vpk");
+                targets.AddRange(PackageFiles(Path.Combine(Core.PkgRoot, "Skeeto\\Skeeto")));
+                string vpk = Core.FirstFile(Path.Combine(Core.PkgRoot, "Skeeto\\素材包"), "*.vpk");
                 if (vpk != null) targets.Add("left4dead2\\addons\\" + Path.GetFileName(vpk));
                 targets.Add("d3d9.dll");
                 targets.Add("dxvk.conf");
@@ -1321,6 +1539,15 @@ namespace Installer
                 Core.Log("WARN", "装机记录属于另一个游戏目录，跳过平台文件删除: " + mf);
             // 新记录且 Platform 为空 = 本次装机确实没勾任何平台组件，平台文件一个都不动。
             // 注意：mqcam.ini / mqcam_state.ini 是用户自己调的相机参数，不在还原删除范围里。
+
+            // 插件文件：只有 Schema>=3 才有这条明细。2 及以下的记录压根没装过插件，
+            // bin 里的东西都是用户自己放的，一个都不许碰。
+            List<string> plugDeleted = new List<string>();
+            if (mine != null && mine.Schema >= ManifestSchema)
+            {
+                // 共用框架不在这里（当初就没记），所以删的都是「这次装的这个包独占的」
+                foreach (string rel in mine.Plugin) targets.Add(rel);
+            }
 
             HashSet<string> uniq = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             // 删掉的那些 vpk 名：还要从 addonlist 里摘掉登记。
@@ -1351,19 +1578,29 @@ namespace Installer
                         backed++;
                         File.Delete(full);
                         del++;
+                        if (key.StartsWith(PluginKit.Anchor + "\\", StringComparison.OrdinalIgnoreCase))
+                            plugDeleted.Add(key);
                     }
                     if (key.StartsWith("left4dead2\\addons\\", StringComparison.OrdinalIgnoreCase))
                         goneAddons.Add(Path.GetFileName(key));
                 }
                 catch (Exception ex) { delFail++; Core.Log("WARN", "删除 " + key + " 失败: " + ex.Message); }
             }
-            report.Add("删掉平台文件 " + del + " 个"
+            // 插件是跟平台文件同一个删除循环里走的，报数时得把它从「平台文件」里扣掉，
+            // 否则一行「删掉平台文件 2 个」会让用户以为删了两个平台组件。
+            report.Add("删掉平台文件 " + (del - plugDeleted.Count) + " 个"
                 + (recorded ? "（按装机记录里的组件）"
                    : (mine == null ? "（没有本目录的装机记录，平台文件未动）"
                       : (precise ? "（记录里本次没有装平台组件）" : "（老记录没有组件信息，按安装包清单）")))
                 + (delFail > 0 ? "，失败 " + delFail + " 个（详见日志）" : ""));
             if (backed > 0) report.Add("删除前已备份 " + backed + " 个文件到 " + backupRoot);
             if (backupFail > 0) report.Add("有 " + backupFail + " 个文件备份失败，已保留未删");
+            if (plugDeleted.Count > 0)
+            {
+                PrunePluginDirs(gameRoot, plugDeleted);
+                report.Add("删掉插件文件 " + plugDeleted.Count + " 个（bin\\neko\\plugins 下）"
+                    + "；共用框架按设计保留（别的插件还在用）");
+            }
 
             foreach (string d in new string[] { "bin\\neko\\mqcore", "bin\\neko", "Skeeto", "skeeto_kbact", "skeeto_update" })
             {
@@ -1408,12 +1645,29 @@ namespace Installer
 
             // 删完本次装的，再把「安装前被覆盖的旧版本」放回去 —— 这是覆盖安装真正的回滚。
             // 不放回的话，一键还原会把用户自己原来那一版一起带走。
-            int restored = mine == null ? 0 : RestoreBackups(gameRoot, mine.Backups, report);
+            // 快照分两种落点：addons 下按文件名回填，bin\neko\plugins 下按相对路径回填，
+            // 混在一起走 RestoreBackups 会把插件那几条当成「可疑路径」丢掉。
+            List<string> addonBak = new List<string>();
+            List<string> plugBak = new List<string>();
+            if (mine != null)
+            {
+                foreach (string line in mine.Backups)
+                {
+                    int bar = (line ?? "").IndexOf('|');
+                    string nm = bar > 0 ? line.Substring(0, bar).Trim() : (line ?? "").Trim();
+                    if (nm.IndexOfAny(new char[] { '\\', '/' }) >= 0) plugBak.Add(line); else addonBak.Add(line);
+                }
+            }
+            int restored = mine == null ? 0 : RestoreBackups(gameRoot, addonBak, report);
+            int plugRestored = mine == null ? 0 : RestorePluginBackups(gameRoot, plugBak);
+            if (plugRestored > 0) report.Add("已把 " + plugRestored + " 个被覆盖的插件文件放回原版本");
 
             // 记录里已经删掉/本来就不存在的条目也一并摘掉，免得下次手放同名文件被误删。
             if (mine != null)
             {
                 mine.Added = kept;
+                // 已经删掉的插件文件从记录里摘掉；没删掉的（被占用 / 权限不足）留着，下次还原还能再试。
+                mine.Plugin.RemoveAll(delegate(string rel) { return !File.Exists(Path.Combine(gameRoot, rel)); });
                 // 回填成功的那几条快照文件已经被删掉了，顺手从记录里摘掉；
                 // 没回填成功的留着，下次还原还能再试一次。
                 mine.Backups.RemoveAll(delegate(string line) { return !SnapshotExists(line); });
@@ -1443,7 +1697,9 @@ namespace Installer
                     + (failed > 0 ? "，失败 " + failed + " 个（详见日志）" : "")
                     + (bad > 0 ? "，跳过可疑记录 " + bad + " 条" : ""));
             else
-                report.Add("没有找到属于当前游戏目录的 MOD 装机记录，MOD 文件未动");
+                report.Add(mine != null
+                    ? "装机记录里没有 MOD 文件（这次只装了插件/组件）"
+                    : "没有找到属于当前游戏目录的 MOD 装机记录，MOD 文件未动");
             report.Add("原版 exe / addonlist / autoexec 没有备份可还原，需要原版请用 Steam 校验文件");
             return report;
         }
@@ -1485,7 +1741,7 @@ namespace Installer
         private static List<string> L4NFiles()
         {
             List<string> rels = new List<string>();
-            string zip = Core.FirstFile(Core.PkgDir, "L4N_v*.zip");
+            string zip = Core.FirstFile(Core.PkgRoot, "L4N_v*.zip");
             try
             {
                 if (zip != null)
@@ -1509,7 +1765,7 @@ namespace Installer
                         }
                     }
                 }
-                else rels.AddRange(PackageFiles(Path.Combine(Core.PkgDir, "L4N平台\\L4N")));
+                else rels.AddRange(PackageFiles(Path.Combine(Core.PkgRoot, "L4N平台\\L4N")));
             }
             catch (Exception ex) { Core.Log("WARN", "读 L4N 包清单失败: " + ex.Message); }
             return rels;
@@ -1671,8 +1927,13 @@ namespace Installer
         /// 2 = 带 Platform= 明细的新记录。靠它把「一个新记录，本次没勾平台组件」和
         /// 「一条老记录，压根不知道装了什么」分清楚 —— 否则前者会被当成后者，还原时
         /// 照着安装包清单把用户自己放的 d3d9.dll / dxvk.conf 也带走。
+        /// 3 = 再带 Plugin= 明细（bin\neko\plugins 下的文件）。2 及以下绝不能碰 bin 下的东西：
+        /// 那会儿还不支持插件，bin 里的东西一律是用户自己放的。
         /// </summary>
-        private const int ManifestSchema = 2;
+        private const int ManifestSchema = 3;
+
+        /// <summary>组件明细（Platform=）从这一版开始有。别跟着 ManifestSchema 一起改。</summary>
+        private const int SchemaPlatform = 2;
 
         private sealed class ManifestSection
         {
@@ -1691,6 +1952,12 @@ namespace Installer
             /// 还原 / 取消安装时按这里把用户原来的那一版放回 addons。
             /// </summary>
             public List<string> Backups = new List<string>();
+            /// <summary>
+            /// 本次写进 bin\neko\plugins 的「独占」插件文件，相对游戏根的路径。
+            /// 共用框架（CFX\Framework 这些）不记 —— 还原时本来就要留着。
+            /// Schema &lt; 3 的段落这个列表恒为空，还原时不许碰 bin。
+            /// </summary>
+            public List<string> Plugin = new List<string>();
         }
 
         private static string NormRoot(string root)
@@ -1747,6 +2014,12 @@ namespace Installer
                         string v = t.Substring("Backup=".Length).Trim();
                         if (v.Length > 0) cur.Backups.Add(v);
                     }
+                    else if (t.StartsWith("Plugin=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // 插件落点是相对游戏根的路径（bin\neko\plugins\...），不能再按文件名截断
+                        string v = t.Substring("Plugin=".Length).Trim().TrimStart('\\');
+                        if (v.Length > 0 && v.IndexOf("..", StringComparison.Ordinal) < 0) cur.Plugin.Add(v);
+                    }
                 }
             }
             catch (Exception ex) { Core.Log("WARN", "读装机记录失败: " + ex.Message); }
@@ -1800,6 +2073,10 @@ namespace Installer
                 foreach (string b in m.Backups) haveB.Add(b);
                 foreach (string b in s.Backups)
                     if (!string.IsNullOrEmpty(b) && haveB.Add(b)) m.Backups.Add(b);
+                HashSet<string> haveG = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string g in m.Plugin) haveG.Add(g);
+                foreach (string g in s.Plugin)
+                    if (!string.IsNullOrEmpty(g) && haveG.Add(g)) m.Plugin.Add(g);
             }
 
             StringBuilder sb = new StringBuilder();
@@ -1812,6 +2089,7 @@ namespace Installer
                     ? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") : s.Time));
                 foreach (string c in s.Platform) sb.AppendLine("Platform=" + c);
                 foreach (string b in s.Backups) sb.AppendLine("Backup=" + b);
+                foreach (string g in s.Plugin) sb.AppendLine("Plugin=" + g);
                 foreach (string a in s.Added) sb.AppendLine("Added=" + a);
                 sb.AppendLine();
             }
@@ -1834,12 +2112,24 @@ namespace Installer
         /// </summary>
         public static void WriteManifest(string gameRoot, List<string> added, List<string> platform, List<string> backups)
         {
+            WriteManifest(gameRoot, added, platform, backups, null);
+        }
+
+        /// <summary>
+        /// 写装机记录。plugins 是本次写进 bin\neko\plugins 的独占文件（相对游戏根的路径）；
+        /// 传 null 表示本次没动插件，不是「清空历史」。
+        /// </summary>
+        public static void WriteManifest(string gameRoot, List<string> added, List<string> platform, List<string> backups, List<string> plugins)
+        {
             try
             {
                 string path = Path.Combine(Core.LogDir, "最近一次.ini");
                 List<ManifestSection> sections = ReadManifest(path);
                 ManifestSection sec = SectionFor(sections, gameRoot, true);
                 sec.Time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                // 这次真的记了插件，就得把这一段升到能表达插件的版本；
+                // 否则还原时会按老记录处理，插件文件永远删不掉。
+                if (plugins != null && plugins.Count > 0 && sec.Schema < ManifestSchema) sec.Schema = ManifestSchema;
 
                 HashSet<string> have = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (string n in sec.Added) have.Add(n);
@@ -1870,6 +2160,18 @@ namespace Installer
                     {
                         string line = (b ?? "").Trim();
                         if (line.Length > 0 && haveB.Add(line)) sec.Backups.Add(line);
+                    }
+                }
+                HashSet<string> haveG = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string g in sec.Plugin) haveG.Add(g);
+                if (plugins != null)
+                {
+                    foreach (string g in plugins)
+                    {
+                        string rel = (g ?? "").Trim().TrimStart('\\');
+                        // 记录会被逐行拿来删文件：带 .. 的一律不收
+                        if (rel.Length > 0 && rel.IndexOf("..", StringComparison.Ordinal) < 0 && haveG.Add(rel))
+                            sec.Plugin.Add(rel);
                     }
                 }
                 SaveManifest(path, sections);
@@ -1936,8 +2238,94 @@ namespace Installer
             return cleared;
         }
 
-        // ---------- 自测：写/删的底线（在真正放数据的那个卷上跑） ----------
         /// <summary>
+        /// --plugtry=&lt;目录&gt;：拿真实库里的插件套装，往一个（假的）游戏目录里完整走一遍
+        /// 「识别 → 落盘 → 写装机记录 → 一键还原」，最后核对独占文件删干净、共用框架还在。
+        ///
+        /// 只在自检里用。写成一条命令而不是散在 UI 里，是因为这条链最容易在
+        /// 「记录格式 / 还原分支」上出错，而 UI 那层只是把它们串起来。
+        /// </summary>
+        public static int PluginRoundTrip(string gameRoot)
+        {
+            int bad = 0;
+            if (string.IsNullOrEmpty(gameRoot)) { Console.WriteLine("PLUGTRY 缺少目标目录"); return 1; }
+            gameRoot = Path.GetFullPath(gameRoot);
+            Console.WriteLine("PLUGTRY 目标: " + gameRoot);
+
+            string savedGame = Core.Cfg.GameRoot;
+            string savedLog = Core.LogDir;
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(Path.Combine(gameRoot, "left4dead2"), "addons"));
+                Directory.CreateDirectory(Path.Combine(gameRoot, "bin"));
+                File.WriteAllText(Path.Combine(gameRoot, "bin\\left4neko.dll"), "fake loader");
+                Core.Cfg.GameRoot = gameRoot;
+                Core.LogDir = Path.Combine(gameRoot, "_装机记录");
+                Directory.CreateDirectory(Core.LogDir);
+
+                Core.ScanMods();
+                List<PluginPack> packs = new List<PluginPack>();
+                foreach (ModGroup g in Catalog.Groups)
+                {
+                    if (g.Plugin == null) continue;
+                    packs.Add(g.Plugin);
+                    Console.WriteLine("PLUGTRY 命中「" + g.Name + "」" + PluginKit.Describe(g.Plugin)
+                        + " 独占: " + g.Plugin.OwnedList(6));
+                }
+                if (packs.Count == 0)
+                {
+                    Console.WriteLine("PLUGTRY 库里没有带插件的套装 —— 先把带 bin\\neko\\plugins 的包放进库");
+                    return 1;
+                }
+
+                PluginResult pr = new PluginResult();
+                CopyPlugins(gameRoot, packs, null, pr);
+                Console.WriteLine("PLUGTRY 写入 独占=" + pr.Written.Count + " 共用=" + pr.SharedWritten.Count
+                    + " 跳过=" + pr.Skipped.Count + " 失败=" + pr.Failed.Count);
+
+                bool allThere = true;
+                foreach (string rel in pr.Written)
+                    if (!File.Exists(Path.Combine(gameRoot, rel))) { allThere = false; Console.WriteLine("PLUGTRY 缺文件: " + rel); }
+                if (!allThere) bad++;
+                if (pr.Written.Count == 0) { bad++; Console.WriteLine("PLUGTRY 一个独占文件都没写进去"); }
+
+                WriteManifest(gameRoot, null, null, null, pr.Written);
+                string mf = Path.Combine(Core.LogDir, "最近一次.ini");
+                string text = File.Exists(mf) ? File.ReadAllText(mf, Encoding.UTF8) : "";
+                bool hasSchema = text.Contains("Schema=" + ManifestSchema);
+                bool hasPlugin = text.Contains("Plugin=");
+                Console.WriteLine("PLUGTRY 装机记录: Schema=" + hasSchema + "，Plugin 行=" + hasPlugin);
+                if (!hasSchema || !hasPlugin) bad++;
+
+                Console.WriteLine("PLUGTRY --- 一键还原 ---");
+                foreach (string l in FullRestore(gameRoot)) Console.WriteLine("PLUGTRY " + l);
+
+                bool ownedGone = true;
+                foreach (string rel in pr.Written)
+                    if (File.Exists(Path.Combine(gameRoot, rel))) { ownedGone = false; Console.WriteLine("PLUGTRY 还原后还在: " + rel); }
+                bool sharedKept = true;
+                foreach (string rel in pr.SharedWritten)
+                    if (!File.Exists(Path.Combine(gameRoot, rel))) { sharedKept = false; Console.WriteLine("PLUGTRY 共用框架被删了: " + rel); }
+                if (!ownedGone) bad++;
+                if (!sharedKept) bad++;
+                Console.WriteLine("PLUGTRY 结果: 独占已删=" + ownedGone + "，共用保留=" + sharedKept);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("PLUGTRY 异常: " + ex.Message);
+                bad++;
+            }
+            finally
+            {
+                Core.Cfg.GameRoot = savedGame;
+                Core.LogDir = savedLog;
+                PluginKit.ClearCache();
+            }
+            Console.WriteLine("plugtry failures = " + bad);
+            return bad;
+        }
+
+        // ---------- 自测：写/删的底线（在真正放数据的那个卷上跑） ----------        /// <summary>
         /// --safeself：验证「写要整份落地、删不能删整包、路径不能越界」这三条。
         /// 特意建在 _装机记录 下面 —— 那是装 MOD 的同一个卷（U 盘多半是 exFAT），
         /// 换名/覆盖的行为跟系统盘 NTFS 不一样，只有在真盘上跑才算数。
@@ -2509,8 +2897,8 @@ namespace Installer
                     if (!camKept) { bad++; Console.WriteLine("[FAIL] 没记录的 mqcam 文件或用户相机设置被删了"); }
                     bool bStillRecorded = File.ReadAllText(mf, Encoding.UTF8).Contains("别的目录.vpk");
                     if (!bStillRecorded) { bad++; Console.WriteLine("[FAIL] 还原后把另一个目录的记录弄丢了"); }
-                    bool schemaWritten = text.Contains("Schema=2");
-                    if (!schemaWritten) { bad++; Console.WriteLine("[FAIL] 新记录没写 Schema=2，还原时会被当成老记录"); }
+                    bool schemaWritten = text.Contains("Schema=" + ManifestSchema);
+                    if (!schemaWritten) { bad++; Console.WriteLine("[FAIL] 新记录没写 Schema=" + ManifestSchema + "，还原时会被当成老记录"); }
                     Console.WriteLine("ADDON 装机记录分段：同目录合并=" + twoA + "，另一目录保留=" + hasB
                         + "，还原只删本目录=" + (aGone && bAlive) + "，只删记录过的组件=" + (dllGone && camKept)
                         + "，Schema=" + schemaWritten);
@@ -2548,6 +2936,62 @@ namespace Installer
                         Core.Cfg.GameRoot = savedGame;
                         Core.LogDir = savedLog;
                         try { Directory.Delete(tmpC, true); } catch { }
+                    }
+
+                    // 插件组件：装机记录里的 Plugin= 只删「这次装的独占文件」。
+                    // 共用框架（CFX\Framework）不进记录，还原时必须留着 —— 删了别的 CFX 枪一起哑。
+                    string tmpE = Path.Combine(Path.GetTempPath(), "l4d2-plug-" + Guid.NewGuid().ToString("N").Substring(0, 6));
+                    try
+                    {
+                        Core.Cfg.GameRoot = tmpE;
+                        Core.LogDir = Path.Combine(tmpE, "_装机记录");
+                        Directory.CreateDirectory(Core.LogDir);
+                        string livePlug = Path.Combine(tmpE, "bin\\neko\\plugins");
+                        Directory.CreateDirectory(Path.Combine(livePlug, "CFX\\Framework"));
+
+                        string srcPlug = Path.Combine(tmpE, "src", "bin\\neko\\plugins");
+                        Directory.CreateDirectory(Path.Combine(srcPlug, "CFX\\Framework"));
+                        Directory.CreateDirectory(Path.Combine(srcPlug, "CFX\\Weapons\\Gun1"));
+                        File.WriteAllText(Path.Combine(srcPlug, "loader.dll"), "loader");
+                        File.WriteAllText(Path.Combine(srcPlug, "CFX\\Framework\\core.dll"), "framework");
+                        File.WriteAllText(Path.Combine(srcPlug, "CFX\\Weapons\\Gun1\\gun.dll"), "gun");
+
+                        PluginKit.ClearCache();
+                        PluginPack pk = PluginKit.Load(srcPlug);
+                        PluginResult pr = new PluginResult();
+                        CopyPlugins(tmpE, new List<PluginPack> { pk }, null, pr);
+
+                        bool gunIn = File.Exists(Path.Combine(livePlug, "CFX\\Weapons\\Gun1\\gun.dll"))
+                                  && File.Exists(Path.Combine(livePlug, "loader.dll"));
+                        bool fwIn = File.Exists(Path.Combine(livePlug, "CFX\\Framework\\core.dll"));
+                        bool recOk = pr.Written.Count == 2 && pr.SharedWritten.Count == 1;
+                        if (!gunIn) { bad++; Console.WriteLine("[FAIL] 插件：独占文件没写进 bin\\neko\\plugins"); }
+                        if (!fwIn) { bad++; Console.WriteLine("[FAIL] 插件：共用框架没写进去"); }
+                        if (!recOk) { bad++; Console.WriteLine("[FAIL] 插件：独占/共用分类记错了（独占 "
+                            + pr.Written.Count + "、共用 " + pr.SharedWritten.Count + "）"); }
+
+                        WriteManifest(tmpE, null, null, null, pr.Written);
+                        FullRestore(tmpE);
+
+                        bool gunOut = !File.Exists(Path.Combine(livePlug, "CFX\\Weapons\\Gun1\\gun.dll"))
+                                   && !File.Exists(Path.Combine(livePlug, "loader.dll"));
+                        bool fwKept = File.Exists(Path.Combine(livePlug, "CFX\\Framework\\core.dll"));
+                        bool gunDirPruned = !Directory.Exists(Path.Combine(livePlug, "CFX\\Weapons\\Gun1"));
+                        bool cfxKept = Directory.Exists(Path.Combine(livePlug, "CFX"));
+                        if (!gunOut) { bad++; Console.WriteLine("[FAIL] 插件：还原没删掉记录里的独占文件"); }
+                        if (!fwKept) { bad++; Console.WriteLine("[FAIL] 插件：还原把共用框架删了（别的 CFX 枪会一起哑）"); }
+                        if (!gunDirPruned) { bad++; Console.WriteLine("[FAIL] 插件：删空的枪目录没清掉"); }
+                        if (!cfxKept) { bad++; Console.WriteLine("[FAIL] 插件：把 CFX 框架目录整个删了"); }
+                        Console.WriteLine("ADDON 插件组件：独占写入=" + gunIn + "，共用写入=" + fwIn
+                            + "，分类正确=" + recOk + "，还原删独占=" + gunOut + "，共用保留=" + fwKept
+                            + "，空目录已收=" + gunDirPruned);
+                    }
+                    finally
+                    {
+                        Core.Cfg.GameRoot = savedGame;
+                        Core.LogDir = savedLog;
+                        PluginKit.ClearCache();
+                        try { Directory.Delete(tmpE, true); } catch { }
                     }
 
                     // 覆盖安装：旧版本先快照，还原时放回去。

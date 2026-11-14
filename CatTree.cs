@@ -3445,7 +3445,11 @@ namespace Installer
             if (m == null) return "";
             string k = m.Kinds;
             if (string.IsNullOrEmpty(k)) k = m.SubjectLevel;
-            return k == null ? "" : k.Replace(",", "·");
+            k = k == null ? "" : k.Replace(",", "·");
+            // 带插件组件的包单独标出来：它除了进 addons 还要往 bin\neko\plugins 写 DLL，
+            // 不标的话和普通包在列表里长得一模一样，装完「手上空的」根本对不上号。
+            if (g.Plugin != null) k = k.Length > 0 ? k + "·含插件" : "含插件";
+            return k;
         }
 
         /// <summary>组合装行的悬停说明：部件一个一个念出来，外加怎么挑。</summary>

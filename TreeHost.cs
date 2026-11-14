@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Threading;
@@ -308,6 +308,7 @@ namespace Installer
             treeView.BringToFront();
             treeView.Rebuild();
             UpdateModCaption();
+            RefreshGameNow();          // 树的「未归类」数只有建完树才知道，卡片跟着补一次
             // 树是后加进来的，会盖在加载占位上：还在扫就把占位顶回去
             if (lblLoading != null && lblLoading.Visible) lblLoading.BringToFront();
         }
@@ -494,7 +495,10 @@ namespace Installer
                     }
                     else last = run;
                 }
-                lblLibInfo.Text = Lang.F("U 盘库 · {0} 个 MOD · {1}", n, last);
+                // 本地模式下根本没有「U 盘库」，那行写错名字会让人以为读的是别处
+                lblLibInfo.Text = Core.IsLocal
+                    ? Lang.F("游戏目录 · {0} 个 MOD · {1}", n, last)
+                    : Lang.F("U 盘库 · {0} 个 MOD · {1}", n, last);
             }
         }
     }

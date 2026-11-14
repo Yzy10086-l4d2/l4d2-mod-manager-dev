@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -49,22 +49,32 @@ namespace Installer
     {
         public string GameRoot = "";
         public string LastRun = "";
-        public bool L4N = true;
-        public bool Skeeto = true;
-        public bool AssetPack = true;
-        public bool Mqcam = true;
-        public bool Dxvk = true;
-        public bool Launch = true;
+        // 组件默认全不勾：单 exe 下载的新人只想装一个 MOD，不该一点「开始装」就顺带
+        // 铺进去约 580MB 平台组件。要用的人自己勾；老配置里写过 True 的仍按配置回填。
+        public bool L4N = false;
+        public bool Skeeto = false;
+        public bool AssetPack = false;
+        public bool Mqcam = false;
+        public bool Dxvk = false;
+        public bool Launch = false;         // 默认不写 Steam 启动项：单 exe 下载的新手根本不知道这项在改他的 localconfig.vdf
         public string LaunchOptions = LaunchArgs.Default;   // 默认值只在 Launch.cs 里写一次
-        public bool CfgFile = true;
+        public bool CfgFile = false;        // 新人首装不默认写 cfg；老配置里写过 True 的照旧
         public bool Overwrite = false;      // false = 已装的跳过；true = 全部重装一遍
         public string TweakSet = "";        // 套用哪套参数存档（空 = 不套）
         public bool ReduceMotion = false;   // true = 关闭轻量过渡，直接显示最终状态
         public bool DpiAware = true;        // true = 自己按 DPI 缩放界面（高 DPI 下不再模糊）；false = 老样子交给系统拉伸
-        public string Mode = "usb";         // 工作模式：usb = U 盘库是主（默认）；local = 游戏目录 addons 当库
+        public string Mode = "local";       // 工作模式：local = 游戏目录 addons 当库（默认，单 exe 下载的人只有这一种）；usb = 拿 U 盘去装机
         public string Appearance = "system";  // 外观：system = 跟随系统（默认）/ light / dark
         public string LibraryRoot = "";     // U 盘模式的主库根；空 = 跟随程序所在盘
+        /// <summary>
+        /// 组件包目录（L4N / Skeeto / MQCam / dxvk / 素材包 所在的那一层）。
+        /// 空 = 自动找：程序目录旁边 → 主库盘的 `游戏内容\求生之路2各项MOD\扩展平台` → U 盘三层扫。
+        /// </summary>
+        public string PkgRoot = "";
         public bool DrawerOpen = true;      // 左栏（组件 / 安装选项）展开状态；首次进来看得到勾选项
+        // 启动时如果一条勾选都没有（换机器、U 盘配置是空的），就按游戏 addons + addonlist.txt
+        // 里「真的在用」的那批回填，而不是让人对着 63 个空行自己猜上次装了哪些。
+        public bool AutoSync = true;
         public string WorkshopDir = "";     // 工坊下载位置；空 = 跟随主库（U 盘库/_创意工坊 或 游戏 addons/_创意工坊）
         public string Lang = "zh";          // 界面语言：zh / en（只影响显示，日志与自检保持中文）
         public List<string> ModDirs = new List<string>();   // 额外的 MOD 库文件夹（任意电脑上的任意目录）
@@ -85,6 +95,12 @@ namespace Installer
         public static string ModRoot;
         public static string DefaultModRoot;
         public static string PkgDir;
+        /// <summary>
+        /// 组件包目录：L4N / Skeeto / MQCam / dxvk / 素材包 所在的那一层。
+        /// 和 PkgDir 分开是因为 PkgDir 还兼着「配置和日志放哪」，用户把组件包放在 D 盘、
+        /// exe 放在别处时，这两件事本来就不是同一个目录。
+        /// </summary>
+        public static string PkgRoot;
         public static string CfgPath;
         public static string LogDir;
         public static string LogFile;
@@ -139,6 +155,9 @@ namespace Installer
             Lang.Load();                 // 界面构造前定语言：控件建出来时文案就对了
             Lang.EnsureBuilt();
             ApplyConfiguredLibraryRoot();
+            // 组件包目录要在主库定下来之后才猜得准（候选里有「主库盘\游戏内容\...\扩展平台」）
+            PkgRoot = ResolvePkgRoot();
+            Log("INFO", "组件包目录: " + PkgRoot);
             // 得等配置读完才知道游戏目录在哪。装机/解包中断留下的 .part 和 ~l4d2-* 暂存目录
             // 以前只清 _装机记录 一处，addons 和库里的一直攒着，扫库时还会被当成怪文件。
             SweepGameTemps(Cfg.GameRoot);
@@ -197,6 +216,108 @@ namespace Installer
             }
             catch { }
             return start;
+        }
+
+        /// <summary>
+        /// 组件包目录。顺序：设置里指定 → 程序目录旁边 → 主库那几个盘上的
+        /// `游戏内容\求生之路2各项MOD\扩展平台` → U 盘三层扫 → 退回程序目录。
+        ///
+        /// 加这一层是因为 PkgDir 只认「exe 在包里」这一种摆法：exe 被拷到桌面/下载目录时，
+        /// 组件包在 D 盘也只能判「缺」，而那些人明明什么都没缺。
+        /// </summary>
+        public static string ResolvePkgRoot()
+        {
+            string cfg = (Cfg == null || Cfg.PkgRoot == null) ? "" : Cfg.PkgRoot.Trim().Trim('"');
+            if (cfg.Length > 0)
+            {
+                try
+                {
+                    if (Directory.Exists(cfg)) return Path.GetFullPath(cfg).TrimEnd('\\');
+                }
+                catch { }
+                Log("WARN", "设置里的组件包目录不存在，改回自动查找: " + cfg);
+            }
+
+            if (LooksLikePkg(PkgDir)) return PkgDir;
+
+            foreach (string c in PkgCandidates())
+            {
+                try
+                {
+                    if (c != null && Directory.Exists(c) && LooksLikePkg(c))
+                    {
+                        Log("INFO", "组件包目录自动找到: " + c);
+                        return Path.GetFullPath(c).TrimEnd('\\');
+                    }
+                }
+                catch { }
+            }
+
+            // 兜底：还是 U 盘/网络盘才穷举，固定盘扫三层会把启动拖慢几十秒
+            string root = WalkUp(PkgDir);
+            try
+            {
+                DriveInfo di = new DriveInfo(Path.GetPathRoot(root));
+                if (di.DriveType == DriveType.Removable || di.DriveType == DriveType.Network)
+                {
+                    foreach (string d in Directory.GetDirectories(root))
+                        if (LooksLikePkg(d)) return d;
+                    foreach (string d in Directory.GetDirectories(root))
+                        foreach (string d2 in Directory.GetDirectories(d))
+                            if (LooksLikePkg(d2)) return d2;
+                }
+            }
+            catch { }
+            return PkgDir;
+        }
+
+        /// <summary>按「主库在哪」推出几个值得一看的组件包位置，只做存在性判断，不递归扫盘。</summary>
+        private static List<string> PkgCandidates()
+        {
+            List<string> list = new List<string>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            List<string> roots = new List<string>();
+            try { if (!string.IsNullOrEmpty(ModRoot)) roots.Add(ModRoot); } catch { }
+            try { if (Cfg != null && !string.IsNullOrEmpty(Cfg.LibraryRoot)) roots.Add(Cfg.LibraryRoot.Trim().Trim('"')); } catch { }
+            try { if (Cfg != null && Cfg.ModDirs != null) roots.AddRange(Cfg.ModDirs); } catch { }
+            foreach (string r in roots)
+            {
+                string root;
+                try { root = Path.GetFullPath(r).TrimEnd('\\'); } catch { continue; }
+                if (!seen.Add(root)) continue;
+                // 库根下面直接就是扩展平台
+                list.Add(Path.Combine(root, "扩展平台"));
+                // 库根是 求生之路2各项MOD 时，往上拼 游戏内容\求生之路2各项MOD\扩展平台
+                string drive = null;
+                try { drive = Path.GetPathRoot(root); } catch { }
+                if (!string.IsNullOrEmpty(drive))
+                {
+                    string g = Path.Combine(Path.Combine(drive, "游戏内容"), "求生之路2各项MOD\\扩展平台");
+                    if (seen.Add(g)) list.Add(g);
+                }
+            }
+
+            // 再按盘符看一遍 `<盘>\游戏内容\求生之路2各项MOD\扩展平台`。
+            // 组件包常常在 D 盘而 exe 在桌面/下载目录，一个盘都不看就永远找不到；
+            // 每个盘只做一次存在性判断，不是递归扫盘，网络盘和没插卡的读卡器都跳过。
+            try
+            {
+                foreach (DriveInfo di in DriveInfo.GetDrives())
+                {
+                    DriveType t;
+                    bool ready;
+                    string root;
+                    try { t = di.DriveType; ready = di.IsReady; root = di.RootDirectory.FullName; }
+                    catch { continue; }
+                    if (!ready) continue;
+                    if (t != DriveType.Fixed && t != DriveType.Removable) continue;
+                    string g = Path.Combine(Path.Combine(root, "游戏内容"), "求生之路2各项MOD\\扩展平台");
+                    if (seen.Add(g)) list.Add(g);
+                }
+            }
+            catch { }
+            return list;
         }
 
         private static bool LooksLikePkg(string dir)
@@ -380,7 +501,9 @@ namespace Installer
                     else if (k == "Mode") Cfg.Mode = v;
                     else if (k == "Appearance") Cfg.Appearance = v;
                     else if (k == "LibraryRoot") Cfg.LibraryRoot = v;
+                    else if (k == "PkgRoot") Cfg.PkgRoot = v;
                     else if (k == "Drawer") Cfg.DrawerOpen = (v != "0");
+                    else if (k == "AutoSync") Cfg.AutoSync = (v != "0");
                     else if (k == "WorkshopDir") Cfg.WorkshopDir = v;
                     else if (k == "Lang") Cfg.Lang = (string.Equals(v, "en", StringComparison.OrdinalIgnoreCase) ? "en" : "zh");
                     else if (k == "ModDir") Cfg.ModDirs.Add(v);
@@ -417,7 +540,9 @@ namespace Installer
                 sb.AppendLine("Mode=" + (ModeLock ?? Cfg.Mode));
                 sb.AppendLine("Appearance=" + Cfg.Appearance);
                 sb.AppendLine("LibraryRoot=" + Cfg.LibraryRoot);
+                sb.AppendLine("PkgRoot=" + Cfg.PkgRoot);
                 sb.AppendLine("Drawer=" + (Cfg.DrawerOpen ? "1" : "0"));
+                sb.AppendLine("AutoSync=" + (Cfg.AutoSync ? "1" : "0"));
                 sb.AppendLine("Lang=" + Cfg.Lang);
                 sb.AppendLine("WorkshopDir=" + Cfg.WorkshopDir);
                 foreach (string d in Cfg.ModDirs) sb.AppendLine("ModDir=" + d);
@@ -715,28 +840,28 @@ namespace Installer
             Phase = "正在检查组件包…";
             List<string> lines = new List<string>();
             allOk = true;
-            string l4nZip = FirstFile(PkgDir, "L4N_v*.zip");
-            string l4nDir = Path.Combine(PkgDir, "L4N平台\\L4N");
+            string l4nZip = FirstFile(PkgRoot, "L4N_v*.zip");
+            string l4nDir = Path.Combine(PkgRoot, "L4N平台\\L4N");
             bool hasL4N = (l4nZip != null) || File.Exists(Path.Combine(l4nDir, "left4dead2.exe"));
             lines.Add(hasL4N ? ("L4N      OK  " + (l4nZip != null ? Path.GetFileName(l4nZip) : "L4N平台\\L4N")) : "L4N      缺");
             if (!hasL4N) allOk = false;
 
-            string skDll = Path.Combine(PkgDir, "Skeeto\\Skeeto\\skeeto.dll");
-            string skPs1 = Path.Combine(PkgDir, "Skeeto\\Skeeto\\Skeeto\\Maintain.ps1");
+            string skDll = Path.Combine(PkgRoot, "Skeeto\\Skeeto\\skeeto.dll");
+            string skPs1 = Path.Combine(PkgRoot, "Skeeto\\Skeeto\\Skeeto\\Maintain.ps1");
             bool hasSk = File.Exists(skDll) || File.Exists(skPs1);
             lines.Add(hasSk ? ("Skeeto   OK  " + SkeetoVersion()) : "Skeeto   缺");
             if (!hasSk) allOk = false;
 
-            string vpk = FirstFile(Path.Combine(PkgDir, "Skeeto\\素材包"), "*.vpk");
+            string vpk = FirstFile(Path.Combine(PkgRoot, "Skeeto\\素材包"), "*.vpk");
             lines.Add(vpk != null ? ("素材包   OK  " + Human(new FileInfo(vpk).Length)) : "素材包   缺");
             if (vpk == null) allOk = false;
 
-            string mq = Path.Combine(PkgDir, "MQCam\\MQCam\\mqcore_package_tool.exe");
+            string mq = Path.Combine(PkgRoot, "MQCam\\MQCam\\mqcore_package_tool.exe");
             lines.Add(File.Exists(mq) ? ("MQCam    OK  " + File.GetLastWriteTime(mq).ToString("yyyy-MM-dd")) : "MQCam    缺");
             if (!File.Exists(mq)) allOk = false;
 
-            string dx1 = Path.Combine(PkgDir, "防闪退\\d3d9.dll");
-            string dx2 = Path.Combine(PkgDir, "防闪退\\dxvk.conf");
+            string dx1 = Path.Combine(PkgRoot, "防闪退\\d3d9.dll");
+            string dx2 = Path.Combine(PkgRoot, "防闪退\\dxvk.conf");
             bool hasDx = File.Exists(dx1) && File.Exists(dx2);
             lines.Add(hasDx ? ("dxvk     OK  " + (new FileInfo(dx1).Length / 1024).ToString("N0") + " KB, " + File.GetLastWriteTime(dx1).ToString("yyyy-MM-dd")) : "dxvk     缺");
             if (!hasDx) allOk = false;
@@ -749,7 +874,7 @@ namespace Installer
         {
             try
             {
-                string v = Path.Combine(Core.PkgDir, "Skeeto\\Skeeto\\VERSION.txt");
+                string v = Path.Combine(Core.PkgRoot, "Skeeto\\Skeeto\\VERSION.txt");
                 if (File.Exists(v))
                 {
                     string[] lines = File.ReadAllLines(v);
