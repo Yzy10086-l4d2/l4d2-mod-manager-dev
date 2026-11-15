@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -4879,6 +4879,50 @@ namespace Installer
         }
 
         /// <summary>
+        /// 同一位置互斥（整机装机用）：这次装进去的 MOD 所在的「位置」里，
+        /// 以前已经进游戏、这次没勾的，只把开关写成 0 —— 文件一律不动，想换回来把开关翻回去就行。
+        /// 只算「本体」（Items）：叠加的扩展（开火音效 / 只改第一人称 / HUD 图标）不是替换关系，
+        /// 玩家常常想留着，这里不碰；「一堆」（地图 / 喷漆 / 我的分支）本来就能同时开，也不算。
+        /// </summary>
+        private List<ModItem> SameSlotLeftovers(List<ModItem> sel)
+        {
+            List<ModItem> off = new List<ModItem>();
+            if (treeView == null || sel == null || sel.Count == 0) return off;
+
+            HashSet<string> selKey = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<string> selName = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ModItem it in sel)
+            {
+                if (it == null) continue;
+                selKey.Add(it.Key);
+                if (!string.IsNullOrEmpty(it.Name)) selName.Add(it.Name);
+            }
+
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Slot s in treeView.Slots)
+            {
+                if (s.Pile) continue;
+                bool touched = false;
+                foreach (ModGroup g in s.Items)
+                {
+                    foreach (ModItem part in g.Parts)
+                        if (selKey.Contains(part.Key)) { touched = true; break; }
+                    if (touched) break;
+                }
+                if (!touched) continue;
+
+                foreach (ModGroup g in s.Items)
+                    foreach (ModItem part in g.Parts)
+                    {
+                        if (selKey.Contains(part.Key) || selName.Contains(part.Name)) continue;
+                        if (!part.Installed && !part.FromGame) continue;   // 还没进游戏的，谈不上关
+                        if (seen.Add(part.Name)) off.Add(part);
+                    }
+            }
+            return off;
+        }
+
+        /// <summary>
         /// 方案树「只装这里」：只把这个分支选中的 vpk 铺进游戏，别的位置一个都不动。
         /// 与整机装机的区别：不碰 L4N / dxvk / 素材包 / 参数配置，不改全局勾选，也不写整机清单。
         /// </summary>
@@ -5028,6 +5072,8 @@ namespace Installer
         {
             public string Root;
             public List<ModItem> Sel = new List<ModItem>();
+            /// <summary>同一位置里以前装过、这次没勾的（只翻开关写成 0，文件不动）。</summary>
+            public List<ModItem> Off = new List<ModItem>();
             public bool L4N, Dxvk, Skeeto, Asset, Mqcam, Launch, Cfg, Swap;
             public string LaunchVal = "";
             public string Tweak = "";
@@ -5201,6 +5247,8 @@ namespace Installer
                 if (!Core.TestGame(root)) { MessageBox.Show("这个目录里没有 left4dead2.exe，先选对游戏根目录。", "路径不对"); return; }
                 InstallJob j = CollectInstallJob(root);
                 if (j == null) return;
+                // 同一位置的旧 MOD 要在 UI 线程上算：位置表是界面那份，后台线程不碰它
+                j.Off = SameSlotLeftovers(j.Sel);
                 StartInstall(j);           // 交给后台线程，由 RunInstall 的 finally 放守卫
                 handed = true;
             }
@@ -5411,6 +5459,10 @@ namespace Installer
 
             // 停止时不改 addonlist：已经复制完的文件先留在 addons 里，但不把它们突然启用。
             if (j.Canceled) return;
+            // 同一位置互斥：j.Off（在 UI 线程算好的）里是这次没勾、但以前装进游戏的同位置旧 MOD，
+            // 只把开关写成 0。「换整套」勾着时 SwitchAddons 已经把库里认识的都关了；
+            // 这里补的是库外那些（只在游戏目录里、或创意工坊下的），它们不在 known 里，
+            // 以前会被漏掉，结果同一把枪两套模型同时开着。
             if (j.Swap)
             {
                 // 换整套：只翻 addonlist 的开关（这次的打开、上一套的关上），文件一个都不动
@@ -5418,16 +5470,25 @@ namespace Installer
                 SetStatus("正在切换 MOD 开关…");
                 int onN, offN, keepN;
                 Work.SwitchAddons(j.Root, j.Sel, j.AssetName, out onN, out offN, out keepN);
+                if (j.Off.Count > 0)
+                {
+                    Dictionary<string, bool> offOnly = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                    foreach (ModItem it in j.Off) offOnly[it.Name] = false;
+                    AddonList.Write(j.Root, offOnly);
+                    Core.Log("OK", "同位置的旧 MOD 关掉 " + j.Off.Count + " 个（库外的，换整套没覆盖到）");
+                }
                 j.SwitchesWritten = true;
                 return;
             }
             Dictionary<string, bool> st = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            foreach (ModItem it in j.Sel) st[it.Name] = true;
+            foreach (ModItem it in j.Off) st[it.Name] = false;      // 先关同位置的旧 MOD
+            foreach (ModItem it in j.Sel) st[it.Name] = true;       // 选中的最后写，永远赢
             if (j.AssetName != null) st[j.AssetName] = true;
             if (st.Count == 0) return;
             AddonList.Write(j.Root, st);
             j.SwitchesWritten = true;
-            Core.Log("OK", "启用状态已写入");
+            Core.Log("OK", "启用状态已写入"
+                + (j.Off.Count > 0 ? "（其中同位置的旧 MOD 关掉 " + j.Off.Count + " 个）" : ""));
         }
 
         private void ReportInstallCanceled(InstallJob j)
@@ -5572,6 +5633,8 @@ namespace Installer
                 ? "开关已写好：这套里有 " + j.Sel.Count + " 个 MOD 会进游戏启用。\r\n\r\n"
                   + "这次没有复制、移动或删除任何文件 —— 本地模式下它们本来就在 addons 里，这里只改 addonlist。\r\n\r\n"
                 : "装好了。现在启动一次游戏吗？\r\n\r\n";
+            if (j.Off.Count > 0)
+                head += "同一位置的旧 MOD 已经关掉 " + j.Off.Count + " 个（文件留在 addons 里，想换回去把开关翻回来就行）。\r\n\r\n";
             bool go = MessageBox.Show(
                 head
                 + "启动会顺带盯 2 分钟崩溃记录，全程不改任何文件；崩了会弹提示，说明这次至少有一个坏包。",
