@@ -919,17 +919,12 @@ namespace Installer
         private readonly Label lblExtraTitle;
         private readonly FlatButton btnPick;
         private readonly FlatButton btnCat;                // 未归类页的手动入口：指定「算哪类 + 替换什么」
-        private readonly FlatButton btnDeploy;             // 「只装这里」：只铺当前分支勾上的 vpk
-        private readonly FlatButton btnApply;               // 「应用改动」：把攒下的开关改动写进 addonlist
-        private readonly ToolTip tipApply;                 // 「应用改动」的悬停说明（按钮常驻，得让人知道它管什么）
+        private readonly ToolTip tipExtra;                 // 「可叠加的扩展」小标题的悬停说明
 
         private List<Slot> slots = new List<Slot>();
         private int unmatched;                       // 一个位置都归不上的 MOD 数
         private readonly List<ModGroup> unmatchedGroups = new List<ModGroup>();   // 具体是哪几组（未归类页列出来）
         private readonly HashSet<string> folded = new HashSet<string>(StringComparer.Ordinal);
-        // 界面上点了开关、但还没写进 addonlist.txt 的改动：vpk 名 → 是否开。
-        // 攒着不写是为了「点错能反悔」，也避免每点一次就动一次游戏文件；最后统一按「应用改动」落地。
-        private readonly Dictionary<string, bool> pending = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         private string selKey = "";
 
         public string SelectedKey { get { return selKey; } }
@@ -1129,33 +1124,13 @@ namespace Installer
             btnCat.Visible = false;
             Controls.Add(btnCat);
 
-            // 「只装这里」：方案树是按位置看的，经常只想试一处（换个枪模看看像不像），
-            // 不想为这一个 vpk 把整套重铺一遍。这个按钮只动当前位置勾上的文件。
-            btnDeploy = new FlatButton();
-            btnDeploy.Text = Lang.S("只装这里");
-            btnDeploy.SetBounds(0, 0, 92, Theme.H);
-            btnDeploy.Visible = false;
-            btnDeploy.Click += delegate { DeployHere(); };
-            Controls.Add(btnDeploy);
-
-            // 「应用改动」：常驻右下角（以前是攒了改动才冒出来，结果没人找得到它）。
-            // 有改动时变实心、标题带条数；没改动时是灰的，点了直接告诉你先点「开关」列。
-            // 不自动写是为了点错能反悔，也避免每点一下都动一次游戏文件。
-            btnApply = new FlatButton();
-            btnApply.Text = Lang.S("应用改动");
-            btnApply.SetBounds(0, 0, 104, Theme.H);
-            btnApply.Click += delegate { ApplyHere(); };
-            Controls.Add(btnApply);
-
-            tipApply = new ToolTip();
-            tipApply.SetToolTip(btnApply, Lang.S("把「开关」列里点出来的改动一次性写进 left4dead2\\addonlist.txt（只改 1/0，不动任何 vpk 文件）"));
+            tipExtra = new ToolTip();
             // 小标题在窄窗口放不下整句话，完整的解释挂在这里
-            tipApply.SetToolTip(lblExtraTitle,
+            tipExtra.SetToolTip(lblExtraTitle,
                 "可叠加的扩展 = 不换本体模型、能和模型同时生效的东西：开火音效、第一人称手部模型、HUD 图标。\r\n"
                 + "这个位置目前还没有这类 MOD；有的话会列在下面，点一下开 / 关，可以多选。");
 
             Resize += delegate { LayoutSelf(); };
-            UpdateApplyButton();
             LayoutSelf();
         }
 
@@ -1212,7 +1187,7 @@ namespace Installer
             {
                 if (!(p.FromGame || p.Installed)) continue;
                 ins++;
-                if (PendingOf(p)) shownOn++;
+                if (p.AddonOn) shownOn++;
             }
 
             // 本地模式：游戏 addons 自己就是库，「已装 / 仅游戏内」这一维度恒为真、一点信息量都没有。
@@ -1235,20 +1210,6 @@ namespace Installer
             else if (shownOn == 0) { swText = Lang.S(local ? "关闭" : "关"); swInk = Theme.Warn; rowBg = Theme.RowOff; }
             else { swText = (local ? "开启 " : "") + shownOn + "/" + ins; swInk = Theme.Warn; rowBg = Theme.RowOff; }
 
-            // 攒着还没落盘的（pending 里有、且跟文件里的实际值不一样）加个 *：
-            // 一眼就能看出「这三行是我点过但还没写进游戏的」
-            if (ins > 0)
-            {
-                bool dirty = false;
-                foreach (ModItem p in g.Parts)
-                {
-                    if (!(p.FromGame || p.Installed)) continue;
-                    bool v;
-                    if (pending.TryGetValue(p.Name, out v) && v != p.AddonOn) { dirty = true; break; }
-                }
-                if (dirty) swText += " *";
-            }
-
             li.SubItems[3].Text = instText;
             li.SubItems[3].ForeColor = instInk;
             li.SubItems[3].Font = Theme.UISmall;
@@ -1256,14 +1217,6 @@ namespace Installer
             li.SubItems[4].ForeColor = swInk;
             li.SubItems[4].Font = Theme.UIBold;
             if (li.BackColor != rowBg) li.BackColor = rowBg;
-        }
-
-        /// <summary>这个 vpk 现在的开关值：还没应用的改动优先，否则读扫描到的实际值。</summary>
-        private bool PendingOf(ModItem p)
-        {
-            bool v;
-            if (pending.TryGetValue(p.Name, out v)) return v;
-            return p.AddonOn;
         }
 
         private static void SelectRow(ListView v, MouseEventArgs e)
@@ -1980,9 +1933,6 @@ namespace Installer
         {
             if (lblFoot != null && s != null) lblFoot.Text = s;
         }
-
-        /// <summary>攒着还没写进 addonlist 的开关改动有几处（关窗口前靠它拦一下，别让改动默默丢掉）。</summary>
-        internal int PendingCount { get { return pending.Count; } }
 
         internal int Unmatched { get { return unmatched; } }
 
@@ -3020,53 +2970,6 @@ namespace Installer
             get { return IsBranchSlot(Current) ? Current : null; }
         }
 
-        /// <summary>
-        /// 「只装这里」：只把这个分支勾上的 vpk 铺进游戏（含同位置的扩展），
-        /// 这个位置以前装、这次没选的候选只翻 addonlist 的开关（文件留着，能开回来）。
-        /// 其它位置、L4N / dxvk / 配置一律不碰。
-        /// </summary>
-        private void DeployHere()
-        {
-            Slot s = Current;
-            if (s == null) return;
-
-            List<ModItem> sel = new List<ModItem>();
-            List<ModItem> off = new List<ModItem>();
-            foreach (ModGroup g in s.Items)
-            {
-                bool on = mf.CountChecked(g) > 0;
-                if (on)
-                {
-                    foreach (ModItem p in g.Parts) sel.Add(p);
-                }
-                else if (!s.Pile)
-                {
-                    // 同一位置互斥：以前装过的（库里的、或只在游戏目录里的）只把开关写成 0，文件一律不动。
-                    // 只在游戏目录里的那些（FromGame）以前漏了，会导致同一位置两个 MOD 同时开着。
-                    // 「一堆」（地图 / 我的分支）不互斥：没勾就是没勾，不能顺手把别的地图关掉。
-                    foreach (ModItem p in g.Parts) if (p.Installed || p.FromGame) off.Add(p);
-                }
-            }
-            // 扩展可叠加：没勾就不动，别把玩家原来在用的音效 / HUD 顺手关了
-            foreach (ModGroup g in s.Extras)
-                if (mf.CountChecked(g) > 0)
-                    foreach (ModItem p in g.Parts) sel.Add(p);
-
-            if (sel.Count == 0)
-            {
-                MessageBox.Show("这个位置现在没选 MOD。\r\n\r\n先在右边点一个候选（组合装可以双击挑部件），再点「只装这里」。",
-                    "没有可装的东西", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            mf.DeploySlot(sel, off, s.Name, new Dictionary<string, bool>(pending), delegate
-            {
-                // 「只装这里」把攒下的开关改动一起写了，这里清账
-                pending.Clear();
-                RefreshSwitchCells();
-                UpdateApplyButton();
-            });
-        }
-
         /// <summary>鼠标 x 落在第几列（客户区坐标）。列宽是自适应的，没有横向滚动。</summary>
         private static int ColAt(ListView v, int x)
         {
@@ -3079,7 +2982,7 @@ namespace Installer
             return -1;
         }
 
-        /// <summary>点「开关」列：把这个 MOD 在 addonlist 里的 1/0 翻过来（先攒在 pending，不立刻写文件）。</summary>
+        /// <summary>点「开关」列：把这个 MOD 在 addonlist 里的 1/0 翻过来，立刻写进文件。</summary>
         private void ToggleSwitch(ModGroup g)
         {
             if (g == null) return;
@@ -3088,19 +2991,18 @@ namespace Installer
             if (ins.Count == 0)
             {
                 MessageBox.Show("这个 MOD 还没进游戏目录，「开关」列是 —，没得开关。\r\n\r\n"
-                    + "想让它进游戏：先点这一行（选中它），再点「只装这里」。\r\n"
-                    + "已经在游戏里的 MOD（这一列会显示 开 / 关）才谈得上开 / 关。",
+                    + "先把它装进游戏（勾上它再点「装机」），之后这一列才会显示 开 / 关。",
                     "还没装进游戏", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             bool allOn = true;
-            foreach (ModItem p in ins) if (!PendingOf(p)) { allOn = false; break; }
+            foreach (ModItem p in ins) if (!p.AddonOn) { allOn = false; break; }
             bool target = !allOn;
-            foreach (ModItem p in ins) pending[p.Name] = target;
+            Dictionary<string, bool> st = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            foreach (ModItem p in ins) st[p.Name] = target;
+            if (!mf.ApplySwitches(st)) return;
             RefreshSwitchCells();
-            UpdateApplyButton();
-            lblFoot.Text = (target ? "已标记为「开」" : "已标记为「关」")
-                + "（" + pending.Count + " 处待应用，开关后面带 * ）· 点右下角「应用改动」才写进游戏";
+            lblFoot.Text = target ? "已开启（写进 addonlist，进游戏生效）" : "已关闭（写进 addonlist，进游戏生效）";
         }
 
         /// <summary>给右键菜单用：把这一组 MOD 的开关翻过来（和点「开关 ⇄」列同一个动作）。</summary>
@@ -3126,56 +3028,18 @@ namespace Installer
                 }
         }
 
-        /// <summary>
-        /// 「应用改动」常驻：有改动就变实心、标题带条数；没改动是白底细线（照样能点，
-        /// 点了会告诉你「先去开关列点一下」）。以前是「攒了改动才出现」，第一次用的人根本不知道有这个按钮。
-        /// 没改动时不禁用：禁用的按钮点不动，也就没法解释它管什么。
-        /// </summary>
-        private void UpdateApplyButton()
-        {
-            if (btnApply == null) return;
-            int n = pending.Count;
-            string want = n > 0 ? "应用改动 " + n : Lang.S("应用改动");
-            if (btnApply.Text != want) btnApply.Text = want;
-            bool on = n > 0;
-            btnApply.Primary = on;
-        }
-
-        private void ApplyHere()
-        {
-            if (pending.Count == 0)
-            {
-                MessageBox.Show(
-                    "现在还没有要应用的开关改动。\r\n\r\n"
-                    + "用法：在右边列表最右边的「开关」列点一下，那一行就会被标成「开」或「关」"
-                    + "（行底色跟着变，开关文字后面带 * 表示还没写进去）。\r\n\r\n"
-                    + "标好一个或几个，再点这个按钮，一次性写进 left4dead2\\addonlist.txt。\r\n"
-                    + "已经装在游戏目录里的 MOD 只改 1/0，文件一个都不复制、不移动。",
-                    "还没有改动", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            if (!mf.ApplySwitches(new Dictionary<string, bool>(pending))) return;
-            pending.Clear();
-            RefreshSwitchCells();
-            UpdateApplyButton();
-            FillDetail();                      // 底部说明与统计回到正常态
-        }
-
         private void FillDetail()
         {
-            UpdateApplyButton();               // 攒着的开关改动跨位置都算，跟着按钮显示数量
             // 搜索优先：搜了词就只看结果（搜索只剩这一条路可走）
             string kw = mf.SearchText;
             if (kw.Length > 0) { ShowSearch(kw); return; }
             if (selKey == "#unmatched")
             {
-                if (btnDeploy != null) btnDeploy.Visible = false;
                 ShowUnmatched();
                 return;
             }
             if (selKey == "#mine+new")
             {
-                if (btnDeploy != null) btnDeploy.Visible = false;
                 ShowNewBranch();
                 return;
             }
@@ -3184,9 +3048,6 @@ namespace Installer
             // 分支页也给「指定位置…」：放进分支的包多半是认不出位置的，
             // 在这里选中它就能直接告诉程序「它替换的是什么」，不用再绕回未归类页。
             if (btnCat != null) btnCat.Visible = IsBranchSlot(s);
-            // 这个位置有选中东西才给「只装这里」；空着就是「留原版」，没什么可装的
-            if (btnDeploy != null)
-                btnDeploy.Visible = s != null && (CheckedGroups(s) + CheckedExtras(s)) > 0;
             lv.BeginUpdate();
             lvExtra.BeginUpdate();
             try
@@ -3348,7 +3209,6 @@ namespace Installer
         {
             lblExtraTitle.Visible = false;
             lvExtra.Visible = false;
-            if (btnDeploy != null) btnDeploy.Visible = false;
             if (btnCat != null) btnCat.Visible = false;
             lv.Visible = true;
             lblTitle.Text = "搜索：" + kw;
@@ -3639,16 +3499,11 @@ namespace Installer
             }
 
             if (btnPick != null) btnPick.SetBounds(x + pad, by, 76, actH);
-            // 右下角从右往左排：「指定位置…」只在未归类页，「只装这里」在这个位置有勾选时；
-            // 「应用改动」常驻最右（位置固定，不然没人找得到）。脚注按实际占用让位。
+            // 右下角从右往左排：「指定位置…」只在未归类页。脚注按实际占用让位。
             bool catBtn = btnCat != null && btnCat.Visible;
-            bool depBtn = btnDeploy != null && btnDeploy.Visible;
-            bool appBtn = btnApply != null;                 // 常驻：位置固定，不让它在有改动时才挪出来
             int edge = x + rightW - 8;
             int used = 0;
             if (catBtn) { btnCat.SetBounds(edge - 100, by, 100, actH); edge -= 108; used += 108; }
-            if (appBtn) { btnApply.SetBounds(edge - 104, by, 104, actH); edge -= 112; used += 112; }
-            if (depBtn) { btnDeploy.SetBounds(edge - 92, by, 92, actH); edge -= 100; used += 100; }
             if (lblFoot != null)
                 lblFoot.SetBounds(x + pad, by + (actH - 18) / 2, Math.Max(60, rightW - 2 * pad - used), 18);
             LayoutCols();
@@ -3739,7 +3594,7 @@ namespace Installer
             string r = target.Name + "（" + target.Extras.Count + " 个扩展）：候选 x" + lv.Left + "–" + lv.Right
                      + "（宽 " + lv.Width + "），扩展 x" + lvExtra.Left + "–" + lvExtra.Right
                      + "（宽 " + lvExtra.Width + "），" + (side ? "并排" : "上下堆叠")
-                     + "；动作行 y" + btnApply.Top + "，列表底 y" + (lv.Top + lv.Height);
+                     + "；动作行 y" + lblFoot.Top + "，列表底 y" + (lv.Top + lv.Height);
 
             if (saved != selKey) { selKey = saved; FillDetail(); LayoutSelf(); }
             return r;

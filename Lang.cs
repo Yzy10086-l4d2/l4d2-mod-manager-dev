@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Text;
@@ -281,11 +281,9 @@ namespace Installer
             Add(d, "严格校验（慢一倍，更保险）", "Strict verify (2× slower, safer)");
             Add(d, "参数", "Params");
             Add(d, "参数配置…", "Config file…");
-            Add(d, "只装这里", "Install here only");
-            Add(d, "留原版", "Keep vanilla");
+                Add(d, "留原版", "Keep vanilla");
             Add(d, "指定位置…", "Choose slot…");
-            Add(d, "应用改动", "Apply changes");
-            Add(d, "一键还原", "Full restore");
+                Add(d, "一键还原", "Full restore");
             Add(d, "常规", "General");
             Add(d, "U 盘模式扫所选主库，本地模式只看游戏目录", "USB mode scans the chosen library; local mode only the game folder");
             Add(d, "减少动态效果", "Reduce motion");
