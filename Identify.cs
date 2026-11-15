@@ -193,6 +193,18 @@ namespace Installer
             return null;
         }
 
+        // 游戏里的 HUD 物件图标就这一个人位置：materials/vgui/hud/icon_<对象名>.vtf。
+        // 名字掏出来交给 Lookup 就能知道画的是哪件东西（一把枪 / 一只特感 / 一个医疗包）。
+        private static bool IsHudIconPath(string p, out string iconName)
+        {
+            iconName = "";
+            const string pre = "materials/vgui/hud/icon_";
+            if (!p.StartsWith(pre, StringComparison.Ordinal)) return false;
+            if (!p.EndsWith(".vtf", StringComparison.Ordinal)) return false;
+            iconName = p.Substring(pre.Length, p.Length - 4 - pre.Length);
+            return iconName.Length > 0;
+        }
+
         /// <summary>官方目标路径不是「同一套」的私有证据：所有 AK 皮肤都写同一个 v_rifle_ak47.mdl。</summary>
         internal static bool IsStockAsset(string p)
         {
@@ -659,7 +671,7 @@ namespace Installer
             // 文件名带版本号：改了识别规则就把版本 +1，旧缓存自动作废，不会读到过时的结论
             // 7z 补上目录表识别（v2.45）时刻意没有升版本：升一次要让整个库的 rar 重新解一遍
             // （几百个包、每个条目一次 Rar.exe），代价太大。改成在 LoadCache 里只丢掉 7z 的旧结论。
-            get { return Path.Combine(Core.LogDir, "identify-cache-v17.tsv"); }
+            get { return Path.Combine(Core.LogDir, "identify-cache-v18.tsv"); }
         }
 
         private static string PackAssets(string assets)
@@ -840,7 +852,82 @@ namespace Installer
                     if (bn.IndexOf(ThrowKeys[i, 0], StringComparison.OrdinalIgnoreCase) >= 0)
                     { cat = "枪械"; sub = ThrowKeys[i, 1]; return true; }
             }
+            // 7) 以下四段是「没认出具体对象」的兜底层，必须排在 1~6 之后：
+            //    一把枪的 HUD 图标包、武器音效包同样带 vgui / sound 路径，先判具体对象才不会抓错。
+            //    有 .mdl 就说明改的是实体，前面几段理应已经接走，这里不再参与。
+            bool hasMdl = false;
+            foreach (string p in ps)
+                if (p.EndsWith(".mdl", StringComparison.Ordinal)) { hasMdl = true; break; }
+
+            if (!hasMdl)
+            {
+                // 喷漆（静态 / 动态）都放 materials/vgui/logos/，它不是界面皮肤。
+                // 放在游戏 addons 里时没有目录名可作依据，只能靠这条认出来 ——
+                // 否则「动态喷漆」会被当成一套 UI 界面，占掉 HUD 的单选槽。
+                bool anyLogo = false, otherVgui = false;
+                foreach (string p in ps)
+                {
+                    if (p.EndsWith(".txt", StringComparison.Ordinal)) continue;
+                    if (p.StartsWith("materials/vgui/logos/", StringComparison.Ordinal)) anyLogo = true;
+                    else if (p.IndexOf("materials/vgui/", StringComparison.Ordinal) >= 0) { otherVgui = true; break; }
+                }
+                if (anyLogo && !otherVgui) { cat = "喷漆"; sub = "喷漆"; return true; }
+
+                // 「某一把枪的 HUD 图标」（materials/vgui/hud/icon_ak47.vtf）是那把枪的一部分，
+                // 不是一整套界面。判据：包里所有界面资源都是 hud/icon_xxx.vtf，且指向同一件东西。
+                // 不单独接走的话，它会掉进「UI 界面」那个单选槽，把用户的整套 HUD 顶掉 ——
+                // 装个 AK 图标，结果计分板变回原版，这是最典型的误伤。
+                bool iconOnly = ps.Count > 0;
+                string iconObj = "";
+                foreach (string p in ps)
+                {
+                    if (p.EndsWith(".txt", StringComparison.Ordinal)) continue;
+                    string iconName;
+                    if (!IsHudIconPath(p, out iconName)) { iconOnly = false; break; }
+                    string hitObj = Lookup(iconName);
+                    if (hitObj == null) { iconOnly = false; break; }
+                    if (iconObj.Length == 0) iconObj = hitObj;
+                    else if (iconObj != hitObj) { iconOnly = false; break; }
+                }
+                if (iconOnly && iconObj.Length > 0)
+                {
+                    string oc, os;
+                    if (SlotIndex.PosOf(iconObj, out oc, out os))
+                    { cat = oc; sub = os; return true; }
+                    // 认得出画的是谁、却不在标准位置表里（比如「石头」）：宁可交给未归类，
+                    // 也不塞进「UI 界面」去顶掉整套 HUD。
+                    return false;
+                }
+
+                // 界面的判据只认 materials/vgui/，不跟着 particles 走 ——
+                // 一套 HUD 常自带粒子，先判界面才不会把整套 HUD 拆到「特效」里去。
+                foreach (string p in ps)
+                    if (p.IndexOf("materials/vgui/", StringComparison.Ordinal) >= 0)
+                    { cat = "杂项"; sub = "UI 界面"; return true; }
+
+                foreach (string p in ps)
+                    if (p.IndexOf("particles/", StringComparison.Ordinal) >= 0
+                        || p.IndexOf("materials/effects/", StringComparison.Ordinal) >= 0)
+                    { cat = "杂项"; sub = "特效"; return true; }
+
+                foreach (string p in ps)
+                    if (p.IndexOf("sound/", StringComparison.Ordinal) >= 0)
+                    { cat = "杂项"; sub = "音效"; return true; }
+            }
+
+            // 脚本 / 平衡性调整：只改行为，没有可替换的「位置」，但至少别丢进未归类
+            foreach (string p in ps)
+                if (p.EndsWith(".nut", StringComparison.Ordinal)
+                    || p.IndexOf("scripts/", StringComparison.Ordinal) >= 0)
+                { cat = "杂项"; sub = "其他"; return true; }
+
             return false;
+        }
+
+        /// <summary>自检用：直接拿一份路径表走分类，不碰真 vpk。</summary>
+        internal static bool ClassifyPaths(List<string> ps, out string cat, out string sub)
+        {
+            return ClassifyByPaths(ps, out cat, out sub);
         }
 
         /// <summary>散装 vpk：读目录表判类型</summary>

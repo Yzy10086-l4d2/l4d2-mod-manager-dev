@@ -358,6 +358,8 @@ namespace Installer
             "步枪", "冲锋枪", "霰弹枪", "狙击枪", "手枪", "特殊武器", "近战", "投掷物", "弹药升级", "其他枪械",
             "一代", "二代", "特感", "普通感染者", "其他人物",
             "治疗与复活", "暂时增益", "其他药品",
+            // 杂项里的「整套替换」三栏排在最前：它们的包通常十几件，比零散道具更该先看到
+            "UI 界面", "特效", "音效",
             "可搬道具", "特效杂项", "其他杂项"
         };
 
@@ -459,6 +461,20 @@ namespace Installer
         }
 
         // ------------------------------------------------ 空位置
+
+        /// <summary>
+        /// 反查：这个名字在标准位置表里属于哪个大类 / 小分类。
+        /// 识别那边「一个包只改了一件东西的 HUD 图标」时用得上 —— 图标画的是谁，包就该归到谁下面。
+        /// </summary>
+        public static bool PosOf(string name, out string cat, out string sub)
+        {
+            cat = ""; sub = "";
+            if (string.IsNullOrEmpty(name)) return false;
+            for (int i = 0; i < PosOrder.GetLength(0); i++)
+                if (PosOrder[i, 1] == name)
+                { sub = PosOrder[i, 0]; cat = CatOfSub(sub); return true; }
+            return false;
+        }
 
         /// <summary>小分类 → 大类。跟 SubOf 反着来，只覆盖 PosOrder 里那些标准位置用到的。</summary>
         private static string CatOfSub(string sub)
@@ -674,6 +690,12 @@ namespace Installer
             if (g == null) return false;
             ModItem m = g.Main;
             if (m == null) return false;
+            // 整套替换的三栏不叠加：一套 HUD / 特效 / 音效本身就是完整替换，
+            // 两套同时开只会互相覆盖，必须走 Items 单选（和 AK-47 一个道理）。
+            // 它们的 Kinds 天然带 HUD / 音效 / 特效，不在这里拦住就会被判成叠加栏。
+            // （只改一把枪的 HUD 图标不在此列：它的 Cat 是枪械，本来就该当那把枪的叠加载荷。）
+            if (g.Cat == "杂项" && (g.Sub == "UI 界面" || g.Sub == "特效" || g.Sub == "音效"))
+                return false;
             if (m.Only1P) return true;                                         // 只动了第一人称，和整套模型不抢
             if (m.AnimOnly) return true;                                       // 表情平台：不换人，谁都能叠
             string k = (m.Kinds ?? "").Trim();

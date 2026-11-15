@@ -454,7 +454,8 @@ namespace Installer
         static readonly Dictionary<string, string> _arcSigCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         // 7z 补上内容识别（v2.45）时同样不升版本：v1 里 7z 存的是「读不出」的空结论，
         // 在 LoadArcContent 里按 key 丢掉即可；rar 的结论仍然有效，不能跟着一起作废。
-        static string ArcContentPath { get { return Path.Combine(Core.LogDir, "archive-content-v1.tsv"); } }
+        // v2：分类规则改了（一把枪的 HUD 图标不再算整套界面），旧结论要整体作废重算。
+        static string ArcContentPath { get { return Path.Combine(Core.LogDir, "archive-content-v2.tsv"); } }
 
         static string ArcSig(string fullPath)
         {
@@ -872,6 +873,16 @@ namespace Installer
         /// </summary>
         static void RefineBySubject(ModItem it)
         {
+            // 整套替换的三栏（界面 / 特效 / 音效）：包里没有可指名的本体，用栏名兜一个对象名。
+            // 这一步必须放在识别之后 —— 识别会把 Subject 整个覆盖掉（这类包读不出模型名），
+            // 在 Classify 里补的会被冲成空串，SlotIndex 再按「名字都认不出」整包丢掉，
+            // 结果是分类对了、树上什么都没有。
+            if (it.Cat == CAT_MISC && IsWholeSet(it.Sub) && string.IsNullOrEmpty((it.Subject ?? "").Trim()))
+            {
+                it.Subject = it.Sub + "套装";       // 位置叫「UI 界面套装」，一眼看出是一整套不是一个零件
+                it.SubjectLevel = "整套";
+                return;
+            }
             if (it.Cat != CAT_MISC) return;
             string gun = SpecificWeapon(it);
             if (gun.Length == 0) return;
@@ -941,6 +952,8 @@ namespace Installer
                 it.Cat = ccat;
                 it.Sub = csub;
                 it.Category = it.Cat;
+                // 整套替换三栏的对象名在 RefineBySubject 里补 —— 必须等识别跑完，
+                // 识别会把 Subject 覆盖一遍，这里补了也会被冲空。
                 return;
             }
 
@@ -1020,6 +1033,17 @@ namespace Installer
             }
 
             GuessBySubject(it);
+        }
+
+        /// <summary>
+        /// 「一整套替换」的三栏：界面 / 特效 / 音效。
+        /// 这三样在实际 MOD 里几乎都是整套出的（一套 HUD 带血条计分板准星，一套特效带血液火光弹道），
+        /// 所以整个包只算一个位置，不进按件拆分的逻辑。
+        /// 注意：只替换某一把枪的 HUD 图标不算在内 —— 那是那把枪的一部分，识别阶段就归到枪下面了。
+        /// </summary>
+        private static bool IsWholeSet(string sub)
+        {
+            return sub == "UI 界面" || sub == "特效" || sub == "音效";
         }
 
         /// <summary>
@@ -1684,6 +1708,28 @@ namespace Installer
                 bad += RecogCheck(!ExtraOf("材质", false), "材质替换不是可叠加扩展");
                 bad += RecogCheck(!ExtraOf("地图", false), "地图不是扩展");
                 bad += RecogCheck(!ExtraOf("", false), "读不出内容时不乱当扩展");
+
+                // 内容分类：只喂路径表，不碰真 vpk。
+                // 「一把枪的 HUD 图标」必须归到那把枪，不能算整套界面 —— 否则它会跑进
+                // UI 界面那个单选槽，把用户整套 HUD 顶掉。
+                bad += RecogCheck(Classified(new string[] { "materials/vgui/hud/icon_rifle.vtf" }, "枪械", "步枪"),
+                    "只改一把枪的 HUD 图标归那把枪的枪种");
+                bad += RecogCheck(Classified(new string[] { "materials/vgui/hud/icon_smg.vtf" }, "枪械", "冲锋枪"),
+                    "冲锋枪图标归冲锋枪");
+                bad += RecogCheck(Classified(new string[] { "materials/vgui/hud/icon_tank.vtf" }, "特感", "特感"),
+                    "特感图标归特感");
+                bad += RecogCheck(Classified(new string[] { "materials/vgui/hud/health.vtf", "materials/vgui/hud/scoreboard.vtf" }, "杂项", "UI 界面"),
+                    "整套 HUD 仍归界面");
+                bad += RecogCheck(Classified(new string[] { "materials/vgui/hud/health.vtf", "materials/vgui/hud/icon_rifle.vtf" }, "杂项", "UI 界面"),
+                    "整套 HUD 里夹一张枪图标，仍算整套界面");
+                bad += RecogCheck(Classified(new string[] { "particles/blood.pcf" }, "杂项", "特效"),
+                    "纯粒子归特效");
+                bad += RecogCheck(Classified(new string[] { "sound/music/theme.wav" }, "杂项", "音效"),
+                    "全局音效归音效");
+                bad += RecogCheck(Classified(new string[] { "sound/weapons/ak47/gunfire.wav" }, "杂项", "音效"),
+                    "认不出对象的武器音效仍按音效兜底（对象名由识别另给）");
+                bad += RecogCheck(Classified(new string[] { "materials/vgui/logos/spray_01.vtf" }, "喷漆", "喷漆"),
+                    "动态喷漆归喷漆，不占 UI 界面");
             }
             catch (Exception ex) { bad++; Core.Log("FAIL", "RECOGSELF 异常: " + ex.Message); }
             finally
@@ -1723,6 +1769,14 @@ namespace Installer
             ModGroup g = new ModGroup();
             g.Parts.Add(new ModItem { Kinds = kinds, Only1P = only1P, Role = "必装" });
             return SlotIndex.IsExtra(g);
+        }
+
+        /// <summary>自检用：给一份 vpk 目录表，看内容分类判成什么。</summary>
+        static bool Classified(string[] paths, string cat, string sub)
+        {
+            string c0, s0;
+            if (!ModIdentify.ClassifyPaths(new List<string>(paths), out c0, out s0)) return false;
+            return c0 == cat && s0 == sub;
         }
 
         /// <summary>自测用：把每个 MOD 的识别结果铺成一张表，人眼核错用。</summary>

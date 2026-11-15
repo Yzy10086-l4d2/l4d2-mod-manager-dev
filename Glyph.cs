@@ -28,6 +28,9 @@ namespace Installer
                 case "投掷物": return "bottle";
                 case "弹药升级": return "ammo";
                 case "人物": return "person";
+                // 特感以前落到 default 的 misc（叠片杂物），八只感染者共用一个杂物图标；
+                // 小分类 "claw" 早就有，大类这里补上，两层才对得上。
+                case "特感": return "claw";
                 case "药品": return "medkit";
                 case "地图":
                 case "三方图": return "map";
@@ -61,6 +64,11 @@ namespace Installer
                 case "治疗与复活": return "medkit";
                 case "暂时增益": return "syringe";
                 case "其他药品": return "pills";
+                // 杂项下面这三个是新加的「整套替换」栏：界面 / 特效 / 音效。
+                // 和老的 "特效杂项"（目录名带「杂项」的零散包）不是一回事，别混。
+                case "UI 界面": return "ui";
+                case "特效": return "fx";
+                case "音效": return "sound";
                 default: return ForCat(cat);
             }
         }
@@ -267,6 +275,46 @@ namespace Installer
                     p.AddRectangle(new RectangleF(6.4f, 10.8f, 3.2f, 1.2f));
                     return p;
 
+                // ---- 杂项 / 整套替换三栏
+                case "ui":
+                    // 显示器：外壳挖空出屏幕，下面一截支架 + 底座。
+                    // 挖空用 Alternate，和医疗包/药瓶一个路子。
+                    p.Dispose();
+                    p = New(FillMode.Alternate);
+                    p.AddRectangle(new RectangleF(1.2f, 2.0f, 13.6f, 9.0f));
+                    p.AddRectangle(new RectangleF(2.9f, 3.5f, 10.2f, 6.0f));
+                    p.AddRectangle(new RectangleF(6.8f, 11.0f, 2.4f, 2.4f));
+                    p.AddRectangle(new RectangleF(4.0f, 13.4f, 8.0f, 1.8f));
+                    return p;
+
+                case "fx":
+                    // 一大一小两颗四角星 = 火花。星形在 17px 下比爆炸云更清楚：
+                    // 云的轮廓全是圆弧，缩小后就是一坨圆点。
+                    p.AddPolygon(Star(5.2f, 5.6f, 4.6f, 1.5f));
+                    p.AddPolygon(Star(11.8f, 11.6f, 2.9f, 0.95f));
+                    return p;
+
+                case "sound":
+                    // 喇叭 + 两道向右张开的斜条（拼成一个 ">"）当声波。
+                    // 试过用弧线，1.5px 宽的弧在 17px 下会被抗锯齿磨成灰雾，斜条反而干净。
+                    p.AddRectangle(new RectangleF(1.2f, 6.0f, 2.8f, 4.0f));
+                    p.AddPolygon(new PointF[]
+                    {
+                        new PointF(4.0f, 6.4f), new PointF(7.8f, 3.0f),
+                        new PointF(7.8f, 13.0f), new PointF(4.0f, 9.6f)
+                    });
+                    p.AddPolygon(new PointF[]
+                    {
+                        new PointF(9.0f, 5.0f), new PointF(10.3f, 4.0f),
+                        new PointF(13.4f, 8.0f), new PointF(12.1f, 9.0f)
+                    });
+                    p.AddPolygon(new PointF[]
+                    {
+                        new PointF(9.0f, 11.0f), new PointF(12.1f, 7.0f),
+                        new PointF(13.4f, 8.0f), new PointF(10.3f, 12.0f)
+                    });
+                    return p;
+
                 default:
                     p.Dispose();
                     return null;
@@ -281,6 +329,19 @@ namespace Installer
             p.AddRectangle(new RectangleF(10.8f, 6.7f, 4.4f, 1.6f));
             p.AddPolygon(new PointF[] { new PointF(4.4f, 9.2f), new PointF(7.4f, 9.2f), new PointF(6.9f, 13.8f), new PointF(4.8f, 13.8f) });
             p.AddPolygon(new PointF[] { new PointF(8.8f, 9.2f), new PointF(10.6f, 9.2f), new PointF(10.0f, 13.0f), new PointF(8.6f, 13.0f) });
+        }
+
+        /// <summary>共用件：四角星（外半径 / 内半径），火花用。第一个尖朝上。</summary>
+        private static PointF[] Star(float cx, float cy, float outer, float inner)
+        {
+            PointF[] pts = new PointF[8];
+            for (int i = 0; i < 8; i++)
+            {
+                double a = -Math.PI / 2 + i * Math.PI / 4;
+                float r = (i % 2 == 0) ? outer : inner;
+                pts[i] = new PointF(cx + (float)(Math.Cos(a) * r), cy + (float)(Math.Sin(a) * r));
+            }
+            return pts;
         }
 
         /// <summary>共用件：一发竖着的子弹（尖头 + 直筒）。x 是左边缘，宽 2.8。</summary>
