@@ -215,6 +215,10 @@ namespace Installer
                 return 0;
             }
 
+            // 先把崩溃钩子装上，再碰磁盘。Init 里要定日志目录、建目录，
+            // 在只读位置（Program Files / 写保护的 U 盘）上那一步会失败 ——
+            // 钩子以前装在 Init 之后，这类失败一条记录都不留，看起来就是「双击没反应」。
+            InstallCrashHandlers();
             Core.Init();
             Theme.Init();
             // 高 DPI：必须在任何窗口创建之前声明，否则系统已经按老规矩把窗口当位图拉伸了。
@@ -231,7 +235,6 @@ namespace Installer
                 else if (string.Equals(modeOverride, "usb", StringComparison.OrdinalIgnoreCase)) Core.Cfg.Mode = "usb";
                 else Core.Log("WARN", "未知的 --mode 值: " + modeOverride + "（只认 local / usb）");
             }
-            InstallCrashHandlers();
             if (vpkFile != null)
             {
                 // 诊断用：把某个 vpk 的目录表打到 _装机记录\vpklist.txt，方便核对解析对不对

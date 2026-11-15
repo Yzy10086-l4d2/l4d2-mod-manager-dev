@@ -137,14 +137,27 @@ namespace Installer
 
         public static void Init()
         {
+            // 早期失败以前会直接抛到 Main 外面：exe 放在 Program Files、写保护的 U 盘，
+            // 或者 _装机记录 这个位置被一个同名文件占住时，用户看到的是「双击没反应」，
+            // 而且一个字的日志都没有 —— 因为崩的时候日志还没定下来。
+            // 这里整体兜住：界面至少还能起来，日志还有地方落。
+            try { InitCore(); }
+            catch (Exception ex)
+            {
+                try { Log("FATAL", "初始化失败: " + ex); } catch { }
+                try { Lang.EnsureBuilt(); } catch { }
+            }
+        }
+
+        private static void InitCore()
+        {
             Here = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             PkgDir = ResolvePkgDir(Here);
             UsbRoot = WalkUp(Here);
             ModRoot = Path.Combine(Path.Combine(UsbRoot, "游戏内容"), "求生之路2各项MOD");
             DefaultModRoot = ModRoot;
             CfgPath = Path.Combine(PkgDir, "L4D2MOD管理工具.配置.ini");
-            LogDir = Path.Combine(PkgDir, "_装机记录");
-            if (!Directory.Exists(LogDir)) Directory.CreateDirectory(LogDir);
+            LogDir = EnsureLogDir(Path.Combine(PkgDir, "_装机记录"));
             LogFile = Path.Combine(LogDir, "log-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".txt");
             // 日志改成攒批落了，正常退出时也要把最后几行写下去（以前只有致命异常那条路会关日志）
             try { AppDomain.CurrentDomain.ProcessExit += delegate { CloseLog(); }; } catch { }
@@ -162,6 +175,32 @@ namespace Installer
             // 以前只清 _装机记录 一处，addons 和库里的一直攒着，扫库时还会被当成怪文件。
             SweepGameTemps(Cfg.GameRoot);
             SweepGameTemps(ModRoot);
+        }
+
+        /// <summary>
+        /// 定下日志目录。程序所在目录不可写就退到临时目录，配置也跟着挪过去 ——
+        /// 只读位置（Program Files、写保护的 U 盘）以前在这一行直接抛出去，
+        /// 用户既打不开也不知道为什么。设置能改却存不下来同样会让人以为「设置没生效」。
+        /// </summary>
+        private static string EnsureLogDir(string preferred)
+        {
+            try
+            {
+                if (!Directory.Exists(preferred)) Directory.CreateDirectory(preferred);
+                return preferred;
+            }
+            catch
+            {
+                string root = Path.Combine(Path.GetTempPath(), "L4D2MOD管理工具");
+                string fallback = Path.Combine(root, "_装机记录");
+                try
+                {
+                    Directory.CreateDirectory(fallback);
+                    CfgPath = Path.Combine(root, "L4D2MOD管理工具.配置.ini");
+                }
+                catch { }
+                return fallback;
+            }
         }
 
         // v2.39 换了产品名，配置文件跟着改名。老文件还在就搬过去，用户原来的设置不丢；

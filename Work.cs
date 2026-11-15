@@ -1210,11 +1210,15 @@ namespace Installer
         }
 
         /// <summary>
-        /// 把游戏 addons 里的一个 vpk 直接删掉（不管当前工作模式）。
+        /// 把游戏 addons 里的一个 vpk 直接删掉（只有本地模式允许）。
         /// 「已装 MOD 开关」窗口用它做批量删除；addonlist 里那条登记一并摘掉。
         /// </summary>
         public static string DeleteGameMod(ModItem m, string gameRoot)
         {
+            // 铁律：U 盘模式不动游戏目录里的文件（库里的那份才是母本）。
+            // 这道校验以前只写在主界面的删除条目那一段，「已装 MOD 开关」窗口走的
+            // 是本函数，绕过去了 —— U 盘模式下照样能真删游戏 addons 里的东西。
+            if (!Core.IsLocal) return "U 盘模式不动游戏目录里的文件；要删请先切到本地模式";
             return DeleteModFile(m, gameRoot);
         }
 
@@ -1429,6 +1433,9 @@ namespace Installer
             Action<int, int, string> progress, List<string> kept, List<string> failed)
         {
             List<string> got = new List<string>();
+            // 本地模式没有 U 盘库：ModRoot 只是程序所在盘算出来的默认库路径，
+            // 它不参与本地模式扫描。往那儿「收」等于把文件搬进一个没人看得见的目录。
+            if (Core.IsLocal) return got;
             string addons = Path.Combine(Path.Combine(gameRoot, "left4dead2"), "addons");
             if (!Directory.Exists(addons)) return got;
             Core.ScanMods();
@@ -3095,6 +3102,11 @@ namespace Installer
         /// </summary>
         public static int ParkDisabled(string gameRoot)
         {
+            // 本地模式没有 U 盘库。以前这里照样把关掉的 vpk 复制到
+            // <程序所在盘>\游戏内容\...\addons回收，再从游戏 addons 删掉 ——
+            // 结果文件搬进一个用户从没见过的目录（那个目录本地模式根本不扫），
+            // MOD 在列表里直接消失，提示却写着「已挪回 U 盘 N 个」。
+            if (Core.IsLocal) return 0;
             Dictionary<string, bool> st = AddonList.Read(gameRoot);
             string addons = Path.Combine(Path.Combine(gameRoot, "left4dead2"), "addons");
             if (!Directory.Exists(addons)) return 0;

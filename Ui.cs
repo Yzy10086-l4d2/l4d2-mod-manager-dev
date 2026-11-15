@@ -609,6 +609,14 @@ namespace Installer
             Label l6 = new Label(); l6.Text = Lang.S("跳过已有 / 全部重写"); l6.SetBounds(240, 80, leftW - 240 - 12, 18); l6.Font = Theme.UISmall; Theme.Dress(l6); l6.ForeColor = Theme.Ink3; gOpt.Controls.Add(l6);
             tips.SetToolTip(rdSkip, Lang.S("平台、Skeeto、素材包、MQCam、MOD 只要已经装过且大小一致就跳过。\r\n装得快，适合新机器或者上次已经装好了。"));
             tips.SetToolTip(rdOver, Lang.S("不管装没装过，全都重新写一遍。\r\n用来修「装了一半」「文件被删/被改」的机器，慢一些但最干净。"));
+            // 本地模式没有「来源库」：选中的条目全都在游戏目录里，CopyMods 遇到 FromGame 直接跳过，
+            // 连「覆盖重装」这个分支都走不到。留着能勾就是骗人 —— 勾了想修一个坏包，什么都不会发生。
+            if (Core.IsLocal)
+            {
+                rdOver.Enabled = false;
+                tips.SetToolTip(rdOver, Lang.S("本地模式下没有可覆盖的来源：这些 MOD 本来就在游戏目录里，这里只改启用开关。\r\n"
+                    + "要重写某个包，从库里重新装（U 盘模式），或者先把 addons 里那份删掉。"));
+            }
 
             // 参数配置：全套管理在对话框里，外面只留「选哪套 + 还原」
             Label l7 = new Label(); l7.Text = Lang.S("参数"); l7.SetBounds(12, 110, 56, 20); Theme.Dress(l7); gOpt.Controls.Add(l7);
@@ -1050,6 +1058,9 @@ namespace Installer
             chkCfg.Checked = !fresh && (Core.Cfg.CfgFile || firstTimeTweak);
             rdSkip.Checked = !Core.Cfg.Overwrite;
             rdOver.Checked = Core.Cfg.Overwrite;
+            // 本地模式没有来源库：配置里就算存着 Overwrite=true，界面也不能显示成「能覆盖」，
+            // 否则用户勾着它装机、以为重写了一遍，实际 Work.CopyMods 早就按 FromGame 跳过了。
+            if (Core.IsLocal) { rdOver.Checked = false; rdOver.Enabled = false; rdSkip.Checked = true; }
             modeSync = true;
             try { cboMode.SelectedIndex = Core.IsLocal ? 1 : 0; }
             finally { modeSync = false; }
@@ -5553,10 +5564,19 @@ namespace Installer
         /// <summary>装完之后问一句要不要立刻起游戏，起了就顺带盯 2 分钟崩溃记录。</summary>
         private void OfferLaunchGame(InstallJob j)
         {
+            // 本地模式下选中的条目全在游戏目录里，CopyMods 直接跳过：一个字节都不复制，
+            // 真正落地的只有 addonlist.txt 的开关。这句必须说准，否则「装好了」会让人
+            // 以为文件被重新写了一遍 —— 勾过「覆盖重装」的人更会以为坏包已经修好。
+            bool switchOnly = Core.IsLocal && j.Added.Count == 0 && j.Platform.Count == 0;
+            string head = switchOnly
+                ? "开关已写好：这套里有 " + j.Sel.Count + " 个 MOD 会进游戏启用。\r\n\r\n"
+                  + "这次没有复制、移动或删除任何文件 —— 本地模式下它们本来就在 addons 里，这里只改 addonlist。\r\n\r\n"
+                : "装好了。现在启动一次游戏吗？\r\n\r\n";
             bool go = MessageBox.Show(
-                "装好了。现在启动一次游戏吗？\r\n\r\n"
+                head
                 + "启动会顺带盯 2 分钟崩溃记录，全程不改任何文件；崩了会弹提示，说明这次至少有一个坏包。",
-                "完成 · 启动游戏", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+                switchOnly ? "完成 · 启动游戏（只写了开关）" : "完成 · 启动游戏",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
             if (!go) return;
             Core.Log("STEP", "启动游戏（同时盯崩溃记录，不再二次启动）");
             SetBusy(true);
