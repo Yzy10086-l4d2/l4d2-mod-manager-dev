@@ -1204,9 +1204,10 @@ namespace Installer
             {
                 foreach (ModItem it in g.Parts)
                 {
-                    // 压缩包里的 vpk 没有真实目录结构可找；游戏 addons 里那份本来就没有 bin
-                    if (it.IsArchive || it.FromGame) continue;
-                    PluginPack p = PluginKit.Find(it.FullPath);
+                    // 游戏 addons 里那份本来就没有 bin，跳过
+                    if (it.FromGame) continue;
+                    // 压缩包里的 vpk 没有真实目录：改读包里有没有按游戏根摆的 bin\neko\plugins
+                    PluginPack p = it.IsArchive ? PluginKit.LoadFromArchive(it.FullPath) : PluginKit.Find(it.FullPath);
                     if (p == null) continue;
                     g.Plugin = p;
                     n++;
