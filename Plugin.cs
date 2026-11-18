@@ -189,7 +189,9 @@ namespace Installer
         public static PluginPack LoadFromArchive(string arcPath)
         {
             if (string.IsNullOrEmpty(arcPath)) return null;
-            if (!string.Equals(Path.GetExtension(arcPath), ".zip", StringComparison.OrdinalIgnoreCase)) return null;
+            string ext = Path.GetExtension(arcPath);
+            if (!string.Equals(ext, ".zip", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(ext, ".rar", StringComparison.OrdinalIgnoreCase)) return null;
 
             string key = "#zip#" + arcPath.ToLowerInvariant();
             PluginPack hit;
@@ -206,33 +208,30 @@ namespace Installer
 
             try
             {
-                using (System.IO.Compression.ZipArchive za = System.IO.Compression.ZipFile.OpenRead(arcPath))
+                string lerr;
+                foreach (ArcEntry e in Catalog.ListArchiveFiles(arcPath, out lerr))
                 {
-                    foreach (System.IO.Compression.ZipArchiveEntry e in za.Entries)
-                    {
-                        if (e.FullName.EndsWith("/")) continue;
-                        string full = e.FullName.Replace('\\', '/');
-                        int at = full.IndexOf(anchorInner, StringComparison.OrdinalIgnoreCase);
-                        if (at < 0) continue;
-                        string inner = full.Substring(at + anchorInner.Length);
-                        if (inner.Length == 0) continue;
+                    string full = e.Inner.Replace('\\', '/');
+                    int at = full.IndexOf(anchorInner, StringComparison.OrdinalIgnoreCase);
+                    if (at < 0) continue;
+                    string inner = full.Substring(at + anchorInner.Length);
+                    if (inner.Length == 0) continue;
 
-                        PluginFile pf = new PluginFile();
-                        pf.Rel = Anchor + "\\" + inner.Replace('/', '\\');
-                        pf.Src = arcPath;
-                        pf.Inner = e.FullName;
-                        pf.Size = e.Length;
-                        pf.Shared = IsSharedPath(inner);
-                        p.Files.Add(pf);
-                        p.Size += pf.Size;
-                        if (pf.Shared) p.SharedCount++; else p.OwnedCount++;
-                        if (inner.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) p.HasDll = true;
-                        string[] seg = inner.Split(new char[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
-                        if (seg.Length >= 4
-                            && string.Equals(seg[0], "CFX", StringComparison.OrdinalIgnoreCase)
-                            && string.Equals(seg[1], "Weapons", StringComparison.OrdinalIgnoreCase))
-                            p.HasWeaponDir = true;
-                    }
+                    PluginFile pf = new PluginFile();
+                    pf.Rel = Anchor + "\\" + inner.Replace('/', '\\');
+                    pf.Src = arcPath;
+                    pf.Inner = e.Inner;
+                    pf.Size = e.Size;
+                    pf.Shared = IsSharedPath(inner);
+                    p.Files.Add(pf);
+                    p.Size += pf.Size;
+                    if (pf.Shared) p.SharedCount++; else p.OwnedCount++;
+                    if (inner.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) p.HasDll = true;
+                    string[] seg = inner.Split(new char[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (seg.Length >= 4
+                        && string.Equals(seg[0], "CFX", StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(seg[1], "Weapons", StringComparison.OrdinalIgnoreCase))
+                        p.HasWeaponDir = true;
                 }
             }
             catch (Exception ex)
@@ -398,6 +397,35 @@ namespace Installer
                 }
                 bad += CheckB(LoadFromArchive(Path.ChangeExtension(zip, ".rar")) == null, true, "非 zip 不认");
                 bad += CheckB(LoadFromArchive(Path.Combine(plain, "b.vpk")) == null, true, "普通文件不会当压缩包读");
+
+                // 8) rar 形态：库里 98/141 个包是 rar，必须能认（没有 WinRAR 就跳过，不判失败）
+                string rarExe = Catalog.RarExe();
+                if (rarExe.Length == 0) Console.WriteLine("PLUG 跳过 rar 自检（这台机器没有 WinRAR/Rar.exe）");
+                else
+                {
+                    string rsrc = Path.Combine(tmp, "rarsrc");
+                    Directory.CreateDirectory(Path.Combine(rsrc, "bin", "neko", "plugins", "CFX", "Weapons", "Gun4"));
+                    File.WriteAllText(Path.Combine(rsrc, "bin", "neko", "plugins", "CFX", "Weapons", "Gun4", "g.dll"), "x");
+                    string rarFile = Path.Combine(tmp, "插件包.rar");
+                    string rerr;
+                    string rlog = Catalog.RunTool(rarExe, "a -r -idq -ep1 \"" + rarFile + "\" \"" + Path.Combine(rsrc, "*") + "\"", out rerr);
+                    if (!File.Exists(rarFile)) Console.WriteLine("PLUG 跳过 rar 自检（打包失败：" + (rerr ?? "无输出") + "）");
+                    else
+                    {
+                        ClearCache();
+                        PluginPack rp = LoadFromArchive(rarFile);
+                        bad += CheckB(rp != null, true, "rar 里认出 bin\\neko\\plugins");
+                        if (rp != null)
+                        {
+                            bad += CheckN(rp.Files.Count, 1, "rar 里收 1 个插件文件");
+                            bad += CheckN(rp.OwnedCount, 1, "rar 里那个算独占");
+                            bad += CheckB(rp.Files[0].Inner != null, true, "rar 条目也记了包内路径");
+                        }
+                        bad += CheckB(Catalog.ArchiveHasPlugins(rarFile), true, "rar 的插件判定为真");
+                        bad += CheckB(Catalog.ArchiveHasPlugins(zip), true, "zip 的插件判定为真");
+                        bad += CheckB(Catalog.ArchiveHasPlugins(Path.Combine(plain, "b.vpk")), false, "不是压缩包时判定为假");
+                    }
+                }
             }
             catch (Exception ex)
             {
