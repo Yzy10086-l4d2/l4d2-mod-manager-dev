@@ -2039,30 +2039,6 @@ namespace Installer
         }
 
         /// <summary>自测用：把每个 MOD 的识别结果铺成一张表，人眼核错用。</summary>
-        /// <summary>读不出内容的 vpk 数量（目录表 0 条）：界面提示和日志用。</summary>
-        internal static int BrokenCount = -1;
-
-        /// <summary>
-        /// 扫完库立刻点名：哪些 vpk 连目录表都读不出来（多半是下载不完整）。
-        /// 压缩包里的不算 —— 7z 读不出目录表是已知限制。
-        /// </summary>
-        public static void ReportBroken()
-        {
-            List<string> names = new List<string>();
-            int n = 0;
-            foreach (ModItem it in Core.ModList)
-            {
-                if (it.IsArchive) continue;
-                if (it.Entries > 0) continue;
-                if (it.Name == null || !it.Name.EndsWith(".vpk", StringComparison.OrdinalIgnoreCase)) continue;
-                n++;
-                if (names.Count < 5) names.Add(it.Name);
-            }
-            BrokenCount = n;
-            if (n == 0) return;
-            Core.Log("WARN", "有 " + n + " 个 vpk 读不出内容（目录表 0 条，多半是下载不完整）："
-                + string.Join("、", names.ToArray()) + (n > names.Count ? " 等" : ""));
-        }
 
         public static string DumpIdentify()
         {
