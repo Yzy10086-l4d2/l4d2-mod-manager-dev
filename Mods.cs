@@ -672,6 +672,8 @@ namespace Installer
             public bool Readable;           // 内容读出来了（在分卷里 / 坏包时为 false）
             public string Title = "";
             public string Author = "";
+            // addoninfo 全文（截前 4000 字）：识别兜底要在描述里找「30连狙」这类玩家叫法。
+            public string Text = "";
         }
 
         /// <summary>
@@ -759,6 +761,7 @@ namespace Installer
             string text = DecodeText(raw);
             meta.Title = CleanField(InfoField(text, "addontitle"));
             meta.Author = CleanField(InfoField(text, "addonauthor"));
+            meta.Text = text != null && text.Length > 4000 ? text.Substring(0, 4000) : (text ?? "");
         }
 
         /// <summary>
