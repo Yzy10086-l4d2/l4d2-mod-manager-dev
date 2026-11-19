@@ -942,6 +942,7 @@ namespace Installer
                 it.Kinds = ir.Kinds;
                 it.Only1P = ir.Only1P;
                 it.AnimOnly = ir.AnimOnly;
+                it.Entries = ir.Entries;
                 it.AssetPaths = ir.Assets;
                 it.AddonTitle = ir.Title;
                 it.AddonAuthor = ir.Author;
@@ -1008,6 +1009,15 @@ namespace Installer
         /// </summary>
         static void RefineBySubject(ModItem it)
         {
+            // 位置认出来了，但小分类还是文件夹 / 兜底给的：以小分类跟位置对齐。
+            // 否则会出现「识别结果 MAC-10、小分类 UZI」这种自相矛盾的记录（2026-11-19 实测）。
+            Positions.Row pr = Positions.Find(it.Subject);
+            if (pr != null && it.Sub != pr.Sub)
+            {
+                it.Sub = pr.Sub;
+                it.Cat = SlotIndex.CatOfSub(pr.Sub);
+                it.Category = it.Cat;
+            }
             // 整套替换的三栏（界面 / 特效 / 音效）：包里没有可指名的本体，用栏名兜一个对象名。
             // 这一步必须放在识别之后 —— 识别会把 Subject 整个覆盖掉（这类包读不出模型名），
             // 在 Classify 里补的会被冲成空串，SlotIndex 再按「名字都认不出」整包丢掉，
@@ -1923,6 +1933,31 @@ namespace Installer
         }
 
         /// <summary>自测用：把每个 MOD 的识别结果铺成一张表，人眼核错用。</summary>
+        /// <summary>读不出内容的 vpk 数量（目录表 0 条）：界面提示和日志用。</summary>
+        internal static int BrokenCount = -1;
+
+        /// <summary>
+        /// 扫完库立刻点名：哪些 vpk 连目录表都读不出来（多半是下载不完整）。
+        /// 压缩包里的不算 —— 7z 读不出目录表是已知限制。
+        /// </summary>
+        public static void ReportBroken()
+        {
+            List<string> names = new List<string>();
+            int n = 0;
+            foreach (ModItem it in Core.ModList)
+            {
+                if (it.IsArchive) continue;
+                if (it.Entries > 0) continue;
+                if (it.Name == null || !it.Name.EndsWith(".vpk", StringComparison.OrdinalIgnoreCase)) continue;
+                n++;
+                if (names.Count < 5) names.Add(it.Name);
+            }
+            BrokenCount = n;
+            if (n == 0) return;
+            Core.Log("WARN", "有 " + n + " 个 vpk 读不出内容（目录表 0 条，多半是下载不完整）："
+                + string.Join("、", names.ToArray()) + (n > names.Count ? " 等" : ""));
+        }
+
         public static string DumpIdentify()
         {
             StringBuilder sb = new StringBuilder();
