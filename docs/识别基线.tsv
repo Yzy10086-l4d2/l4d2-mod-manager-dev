@@ -1,11 +1,9 @@
 ﻿路径	大类	小分类	识别结果	键	候选
 @游戏\addons\Skeeto_Preset_Asset_Pack.vpk	杂项	特效	特效套装		
-@游戏\addons\eku 水手服 1.4 全生还者.vpk	人物	一代	佐伊	survivor_teenangst	
-@游戏\addons\eku 水手服 预设材质 1.4.vpk	杂项	其他			
 @游戏\addons\workshop\3558049615.vpk	杂项	其他			
 @游戏\addons\workshop\3787239937.vpk	杂项	其他			
 @游戏\addons\workshop\3840673134.vpk	枪械	手枪	马格南	pistol_magnum	
-@游戏\addons\极光魅影替换ak4771.vpk	枪械	步枪	AK-47	rifle_ak47	
+@游戏\addons\【明日~1.VPK	枪械	狙击枪	15发木狙	huntingrifle	
 addons三方地图\25年刑期-翻新版.rar\25年刑期-翻新版.vpk	枪械	手枪	手枪	pistol	
 addons三方地图\84警区.rar\84警区.vpk	场景	天空盒	天空盒	skybox	
 addons三方地图\CF\巨人城废墟.rar\巨人城废墟 (1).vpk	特感	普通感染者	普通感染者	pumpshotgun	
@@ -167,7 +165,7 @@ addons三方地图\深埋.rar\深埋\深埋part1.vpk	地图	单张地图
 addons三方地图\深埋.rar\深埋\深埋part2.vpk	地图	单张地图			
 addons三方地图\演变20261026.rar\演变20261026.vpk	场景	天空盒	天空盒		
 addons三方地图\狂潮珠江2026713.rar\狂潮珠江2026713.vpk	枪械	冲锋枪	UZI	uzi	
-addons三方地图\理论问题重制版.rar\理论问题重制版.vpk	地图	单张地图			AK-47
+addons三方地图\理论问题重制版.rar\理论问题重制版.vpk	地图	单张地图			
 addons三方地图\生化危机系列\梦魇之屋v2.rar\梦魇之屋v2-1.vpk	近战	近战	近战武器		
 addons三方地图\生化危机系列\梦魇之屋v2.rar\梦魇之屋v2-2.vpk	枪械	冲锋枪	UZI	propanecanister	
 addons三方地图\生化危机系列\梦魇之屋v2.rar\梦魇之屋v2-3.vpk	地图	生化危机系列			
@@ -204,7 +202,7 @@ addons三方地图\重生之岛.rar\重生之岛.vpk	场景	天空盒	天空盒
 addons三方地图\闪电突袭2.rar\闪电突袭2\闪电突袭2.vpk	场景	天空盒	天空盒	skybox	
 addons三方地图\闹鬼森林终章修复版.rar\闹鬼森林终章修复版.vpk	地图	单张地图			
 addons三方地图\防线 v1.01.rar\防线 v1.01.vpk	特感	特感	Witch		
-addons三方地图\风之低语重制版.rar\风之低语重制版.vpk	地图	单张地图			AK-47
+addons三方地图\风之低语重制版.rar\风之低语重制版.vpk	地图	单张地图			
 addons三方地图\马洛伊博士第一次相遇.rar\马洛伊博士第一次相遇.vpk	特感	特感	Witch	witch	
 addons三方地图\黄金眼修复版.zip\goldeneye.vpk	地图	单张地图			
 addons三方地图\黎明.rar\黎明.vpk	场景	天空盒	天空盒	skybox	
@@ -282,6 +280,7 @@ addons人物\二代人物.rar\二代人物\黑胖Coach\露露缇雅 幽灵 替�
 addons人物\雪纺荷叶边海洋比基尼 尼克 KSEP\雪纺荷叶边海洋比基尼 尼克 KSEP.vpk	人物	二代	尼克	survivor_gambler	
 addons各类物品储藏库\15发连狙\(15连) 卡提加兰德.vpk	枪械	狙击枪	15发木狙	huntingrifle	
 addons各类物品储藏库\15发连狙\Deep Seek蓝色大肥鱼主题15连狙 替换猎枪.vpk	枪械	狙击枪	15发木狙	huntingrifle	
+addons各类物品储藏库\15发连狙\【明日方舟】蕾缪安 bo7 m34加兰德改件.vpk	枪械	狙击枪	15发木狙	huntingrifle	
 addons各类物品储藏库\15发连狙\（15连） 美游athena.vpk	枪械	狙击枪	15发木狙	huntingrifle	
 addons各类物品储藏库\30发连狙\30连 FN LICC IWS）.vpk	枪械	狙击枪	30发军用狙	sniper_military	
 addons各类物品储藏库\30发连狙\30连 强袭-自由替换军用.vpk	枪械	狙击枪	30发军用狙	sniper_military	
@@ -368,8 +367,8 @@ addons各类物品储藏库\杂项功能\特感圣诞帽.vpk	特感	特感	通�
 addons各类物品储藏库\杂项功能\特感红帽子.vpk	特感	特感	通用	c:通用	
 addons各类物品储藏库\杂项功能\特感高亮.vpk	特感	特感	通用	c:通用	
 addons各类物品储藏库\杂项功能\瞄准镜开镜标记.vpk	杂项	其他			
-addons各类物品储藏库\杂项功能\蓝光子弹.vpk	杂项	特效	特效套装		
-addons各类物品储藏库\杂项功能\蓝光子弹小型.vpk	杂项	特效	特效套装		
+addons各类物品储藏库\杂项功能\蓝光子弹.vpk	杂项	弹道			
+addons各类物品储藏库\杂项功能\蓝光子弹小型.vpk	杂项	弹道			
 addons各类物品储藏库\杂项功能\蓝色大肥鱼(tank).vpk	特感	特感	Tank	hulk	
 addons各类物品储藏库\杂项功能\超绝和平精英死亡音响.vpk	杂项	音效	音效套装		
 addons各类物品储藏库\火光消除\火光消除手电HUB1.vpk	杂项	特效	特效套装		
