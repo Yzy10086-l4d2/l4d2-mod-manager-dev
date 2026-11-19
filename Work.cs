@@ -1787,6 +1787,147 @@ namespace Installer
         }
         // ---------- 批量导入：把散落的 vpk / 压缩包收进库并按名字归类 --------
         // move=true 时，复制校验通过后删掉源文件（"收进库"，不占双份体积）
+        //
+        // 带插件的套装（vpk 旁边还有 bin\neko\plugins 的 CFX 插件版）单独走一条路：
+        // 只收 vpk、把 bin 留在原地，装机时 PluginKit 就找不到插件 —— 进游戏手上是空的，
+        // 声音却正常（音效在 vpk 里，模型靠插件挂上去），最难查。整包收进库，库里的摆法
+        // 与源保持一致，装机那条路本来就从 vpk 往上找 bin，不用再改。
+
+        /// <summary>套装：vpk 旁边（或往上两层）有 bin\neko\plugins 的那个 MOD 目录。</summary>
+        private sealed class PackSource
+        {
+            public string Root;        // 含 bin 的那一层，相当于「游戏根」的替身
+            public string PluginsDir;  // <Root>\bin\neko\plugins
+        }
+
+        private static PackSource FindPack(string vpkPath)
+        {
+            string dir;
+            try { dir = Path.GetDirectoryName(Path.GetFullPath(vpkPath)); }
+            catch { return null; }
+            if (string.IsNullOrEmpty(dir)) return null;
+            for (int up = 0; up <= 2 && !string.IsNullOrEmpty(dir); up++)
+            {
+                string probe = Path.Combine(Path.Combine(Path.Combine(dir, "bin"), "neko"), "plugins");
+                if (Directory.Exists(probe))
+                {
+                    PluginPack p = PluginKit.Load(probe);
+                    // 没有 DLL 的是平台自带的 SDK 头；跨层找到的必须带 CFX\Weapons\<枪>，
+                    // 否则多半是平台运行库，不能算这个 MOD 的（和装机时同一把尺子）。
+                    if (p != null && p.HasDll && (up == 0 || p.HasWeaponDir))
+                    {
+                        string neko = Path.GetDirectoryName(probe);
+                        string bin = neko == null ? null : Path.GetDirectoryName(neko);
+                        string root = bin == null ? null : Path.GetDirectoryName(bin);
+                        if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
+                        {
+                            PackSource s = new PackSource();
+                            s.Root = root;
+                            s.PluginsDir = probe;
+                            return s;
+                        }
+                    }
+                }
+                try { dir = Path.GetDirectoryName(dir); } catch { return null; }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 把整个套装收进库：库里的摆法和源一致（vpk 与 bin 同级），装的时候
+        /// PluginKit 从 vpk 往上找 bin\neko\plugins 才找得到。返回入库的 vpk 个数，0 = 没进。
+        /// </summary>
+        private static int ImportPack(string vpkPath, PackSource s, bool move, List<string> log)
+        {
+            string root = s.Root;
+            string packName = "";
+            try { packName = Path.GetFileName(root.TrimEnd('\\')); } catch { }
+            string vpkName = Path.GetFileNameWithoutExtension(vpkPath);
+            if (packName.Length == 0) packName = vpkName;
+            string relDir = ClassifyByName(packName);
+            if (relDir.IndexOf("杂项功能") >= 0) relDir = ClassifyByName(vpkName);
+            string dstRoot = Path.Combine(Path.Combine(Core.ModRoot, relDir), packName);
+            if (Directory.Exists(dstRoot))
+            {
+                log.Add("已存在，跳过套装 " + relDir + "\\" + packName);
+                return 0;
+            }
+
+            List<string> copied = new List<string>();
+            string firstFail = null;
+            try
+            {
+                Directory.CreateDirectory(dstRoot);
+                // 1) 根下的直接文件（vpk、安装说明、预览图）
+                foreach (string f in Directory.GetFiles(root, "*", SearchOption.TopDirectoryOnly))
+                {
+                    string why;
+                    if (Core.CopyOneVerified(f, Path.Combine(dstRoot, Path.GetFileName(f)), out why)) copied.Add(f);
+                    else if (firstFail == null) firstFail = Path.GetFileName(f) + "：" + why;
+                }
+                // 2) bin 整棵树（插件本体）
+                string srcBin = Path.Combine(root, "bin");
+                if (Directory.Exists(srcBin))
+                {
+                    foreach (string f in Directory.GetFiles(srcBin, "*", SearchOption.AllDirectories))
+                    {
+                        string rel = f.Substring(root.Length).TrimStart('\\');
+                        string dst = Path.Combine(dstRoot, rel);
+                        try { Directory.CreateDirectory(Path.GetDirectoryName(dst)); } catch { }
+                        string why;
+                        if (Core.CopyOneVerified(f, dst, out why)) copied.Add(f);
+                        else if (firstFail == null) firstFail = rel + "：" + why;
+                    }
+                }
+                // 3) vpk 在子目录里（跨层套装）：按相对位置补上
+                string fullVpk;
+                try { fullVpk = Path.GetFullPath(vpkPath); } catch { fullVpk = vpkPath; }
+                string relVpk = fullVpk.Length > root.Length ? fullVpk.Substring(root.Length).TrimStart('\\') : Path.GetFileName(fullVpk);
+                string dstVpk = Path.Combine(dstRoot, relVpk);
+                if (!File.Exists(dstVpk))
+                {
+                    try { Directory.CreateDirectory(Path.GetDirectoryName(dstVpk)); } catch { }
+                    string why;
+                    if (Core.CopyOneVerified(fullVpk, dstVpk, out why)) copied.Add(fullVpk);
+                    else if (firstFail == null) firstFail = relVpk + "：" + why;
+                }
+
+                if (firstFail != null)
+                {
+                    // 半套比不收更坑：库里留个缺 dll 的包，装完照样是空的。
+                    try { Directory.Delete(dstRoot, true); } catch { }
+                    log.Add("套装 " + packName + " 没拷成（" + firstFail + "），这次不收");
+                    return 0;
+                }
+
+                int vpks = 0;
+                foreach (string c in copied)
+                    if (c.EndsWith(".vpk", StringComparison.OrdinalIgnoreCase)) vpks++;
+                log.Add("入库套装（含插件）" + relDir + "\\" + packName + "："
+                    + copied.Count + " 个文件（vpk " + vpks + " 个）");
+                if (move)
+                {
+                    foreach (string c in copied)
+                    {
+                        try { File.Delete(c); }
+                        catch (Exception ex) { log.Add("已复制但源文件删不掉（" + Path.GetFileName(c) + "）：" + ex.Message); break; }
+                    }
+                }
+                foreach (string c in copied)
+                {
+                    if (c.EndsWith(".vpk", StringComparison.OrdinalIgnoreCase))
+                        AddToMem(Path.Combine(dstRoot, c.Substring(root.Length).TrimStart('\\')));
+                }
+                return vpks;
+            }
+            catch (Exception ex)
+            {
+                try { Directory.Delete(dstRoot, true); } catch { }
+                log.Add("套装 " + packName + " 导入出错：" + ex.Message);
+                return 0;
+            }
+        }
+
         public static List<string> ImportVpks(string sourceDir, bool move, out int imported, out int skipped)
         {
             imported = 0; skipped = 0;
@@ -1807,8 +1948,28 @@ namespace Installer
             }
             catch { }
 
-            foreach (string f in Directory.GetFiles(sourceDir, "*.vpk", SearchOption.AllDirectories))
+            List<string> vpkFiles = new List<string>(Directory.GetFiles(sourceDir, "*.vpk", SearchOption.AllDirectories));
+
+            // 先认套装：带 bin\neko\plugins 的，整个目录收进库（只收 vpk 会让插件留在原地）
+            HashSet<string> claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string f in vpkFiles)
             {
+                if (claimed.Contains(f)) continue;
+                PackSource ps = FindPack(f);
+                if (ps == null) continue;
+                int n = ImportPack(f, ps, move, log);
+                if (n <= 0) { skipped++; continue; }
+                imported += n;
+                foreach (string v in Directory.GetFiles(ps.Root, "*.vpk", SearchOption.AllDirectories))
+                {
+                    claimed.Add(v);
+                    known.Add(Path.GetFileName(v));
+                }
+            }
+
+            foreach (string f in vpkFiles)
+            {
+                if (claimed.Contains(f)) continue;
                 string name = Path.GetFileName(f);
                 if (known.Contains(name)) { skipped++; continue; }
                 string relDir = ClassifyByName(name);
@@ -1816,7 +1977,7 @@ namespace Installer
             }
 
             // 7z 也要收：识别、装机、冲突检查都支持 7z 了，只有这里还只扫 rar/zip，
-            // 结果「批量导入」对着一个 7z 文件夹一个字都不收，也不说为什么。
+            // 结果「批量导入」对着一个装着 7z 的文件夹点导入会一个都不收，还不说为什么。
             foreach (string pat in new string[] { "*.rar", "*.zip", "*.7z" })
             {
                 foreach (string f in Directory.GetFiles(sourceDir, pat, SearchOption.AllDirectories))
@@ -3061,6 +3222,39 @@ namespace Installer
                     Core.Cfg.GameRoot = savedGame;
                     Core.LogDir = savedLog;
                     try { Directory.Delete(tmpB, true); } catch { }
+                }
+
+                // 批量导入：带插件的套装（vpk + bin\neko\plugins）要整体收进库。
+                // 只收 vpk 会把插件留在原地，装机时找不到 —— 进游戏手上空的，声音却正常。
+                string savedRootPack = Core.ModRoot;
+                try
+                {
+                    string packLib = Path.Combine(tmp, "libPack");
+                    string packSrc = Path.Combine(tmp, "待导入Pack");
+                    string packDir = Path.Combine(packSrc, "AK47插件版");
+                    string packPlug = Path.Combine(packDir, "bin\\neko\\plugins");
+                    Directory.CreateDirectory(packLib);
+                    Directory.CreateDirectory(Path.Combine(packPlug, "CFX\\Framework"));
+                    Directory.CreateDirectory(Path.Combine(packPlug, "CFX\\Weapons\\Gun1"));
+                    File.WriteAllText(Path.Combine(packDir, "AK47插件版.vpk"), "v");
+                    File.WriteAllText(Path.Combine(packPlug, "CFX\\Framework\\core.dll"), "d");
+                    File.WriteAllText(Path.Combine(packPlug, "CFX\\Weapons\\Gun1\\g.dll"), "g");
+                    Core.ModRoot = packLib;
+                    int impP, skpP;
+                    ImportVpks(packSrc, false, out impP, out skpP);
+                    string packBox = Path.Combine(Path.Combine(Path.Combine(packLib, "addons各类物品储藏库"), "AK47"), "AK47插件版");
+                    bool gotPackVpk = File.Exists(Path.Combine(packBox, "AK47插件版.vpk"));
+                    bool gotPackDll = File.Exists(Path.Combine(packBox, "bin\\neko\\plugins\\CFX\\Weapons\\Gun1\\g.dll"));
+                    if (!gotPackVpk) { bad++; Console.WriteLine("[FAIL] 批量导入：套装里的 vpk 没进库"); }
+                    if (!gotPackDll) { bad++; Console.WriteLine("[FAIL] 批量导入：套装里的 bin\\neko\\plugins 没跟着进库"); }
+                    Console.WriteLine("ADDON 套装导入：vpk=" + gotPackVpk + "，插件=" + gotPackDll
+                        + "（入库 " + impP + " 个，跳过 " + skpP + " 个）");
+                }
+                finally
+                {
+                    Core.ModRoot = savedRootPack;
+                    try { Directory.Delete(Path.Combine(tmp, "libPack"), true); } catch { }
+                    try { Directory.Delete(Path.Combine(tmp, "待导入Pack"), true); } catch { }
                 }
 
                 // 批量导入：*.7z 也要收 —— 识别、装机、冲突检查都支持 7z，只有「导入」原来只扫 rar/zip，

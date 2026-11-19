@@ -3561,6 +3561,7 @@ namespace Installer
                 for (int i = 0; i < log.Count && i < 6; i++) sample += "\r\n  · " + log[i];
             MessageBox.Show("导入完成：入库 " + imported + " 个，已存在跳过 " + skipped + " 个。" + sample
                 + "\r\n\r\n分类文件夹是按文件名猜的；猜不准就在列表里右键「重命名所选」或直接拖到对的文件夹。\r\n"
+                + "带 CFX 插件的套装（vpk 旁边有 bin\\neko\\plugins）会连 bin 一起收进库，装机时自动铺插件。\r\n"
                 + "这些 MOD 现在只在库里，还没有装进游戏。要用的时候在方案树里勾上，或右键选「只装这个 MOD」。", "导入");
         }
 
