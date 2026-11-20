@@ -1,5 +1,10 @@
 ﻿路径	大类	小分类	识别结果	键	候选
+@游戏\addons\AK-47.vpk	枪械	步枪	AK-47	rifle_ak47	
+@游戏\addons\M15 MOD 0(SCAR).vpk	枪械	步枪	SCAR-L	desert_rifle	
+@游戏\addons\MW4 50GS APEX(Pistols).vpk	枪械	手枪	手枪	pistol	
+@游戏\addons\MWII Brysan800 (shotgun_chrome).vpk	枪械	霰弹枪	铁喷	shotgun_chrome	
 @游戏\addons\Skeeto_Preset_Asset_Pack.vpk	杂项	特效	特效套装		
+@游戏\addons\The Tsunami City Against Tide v1 (2).vpk	地图	单张地图			
 @游戏\addons\eku 水手服 1.4 全生还者.vpk	人物	一代	佐伊	survivor_teenangst	
 @游戏\addons\eku 水手服 1.4 局内颜色切换.vpk	杂项	其他			
 @游戏\addons\eku 水手服 1.4 弹药堆一代.vpk	弹药升级	弹药升级	弹药	ammo	
@@ -27,7 +32,7 @@
 @游戏\addons\workshop\3840673134.vpk	枪械	手枪	马格南	pistol_magnum	
 addons三方地图\25年刑期-翻新版.rar\25年刑期-翻新版.vpk	地图	单张地图			
 addons三方地图\84警区.rar\84警区.vpk	地图	单张地图			
-addons三方地图\CF\巨人城废墟.rar\巨人城废墟 (1).vpk	僵尸	小僵尸	普通感染者	pumpshotgun	
+addons三方地图\CF\巨人城废墟.rar\巨人城废墟 (1).vpk	僵尸	小僵尸	普通感染者	knife	
 addons三方地图\CF\巨人城废墟.rar\巨人城废墟 (2).vpk	地图	CF			
 addons三方地图\Dry County.rar\Dry County\Dry County.vpk	地图	单张地图			
 addons三方地图\mod测试地图.rar\mod测试地图.vpk	地图	单张地图			
@@ -278,9 +283,9 @@ addons各类物品储藏库\AK47\AK47 卡提西亚主题共鸣 -.vpk	枪械	步�
 addons各类物品储藏库\AK47\【改模】【重投】RGB-AK_2025 科幻黑.vpk	枪械	步枪	AK-47	rifle_ak47	
 addons各类物品储藏库\AK47\周防パトラgame over ak47.vpk	枪械	步枪	AK-47	rifle_ak47	
 addons各类物品储藏库\AK47\铃兰scarh ak.vpk	枪械	步枪	AK-47	rifle_ak47	
-addons各类物品储藏库\AWP\AWP 可畏 主题 CSGO.vpk	枪械	狙击枪	AWP	sniper_awp	
-addons各类物品储藏库\AWP\AWP【蔚蓝档案Blue Archive】圣园未花主题.vpk	枪械	狙击枪	AWP	sniper_awp	
-addons各类物品储藏库\AWP\初音未来AWP Miku AWP (AWP).vpk	枪械	狙击枪	AWP	sniper_awp	
+addons各类物品储藏库\AWP\AWP 可畏 主题 CSGO.vpk	枪械	狙击枪	AWP	snip_awp	
+addons各类物品储藏库\AWP\AWP【蔚蓝档案Blue Archive】圣园未花主题.vpk	枪械	狙击枪	AWP	snip_awp	
+addons各类物品储藏库\AWP\初音未来AWP Miku AWP (AWP).vpk	枪械	狙击枪	AWP	snip_awp	
 addons各类物品储藏库\M16\M16 CODMW2022 M4 HELIOTROPE 天芹菜.vpk	枪械	步枪	M16	rifle	
 addons各类物品储藏库\M16\shu_weapon_ram7_starlit_m16.vpk	枪械	步枪	M16	rifle	
 addons各类物品储藏库\M16\提弗洛斯mk4替换m16.zip\提弗洛斯mk4替换m16.vpk	枪械	步枪	M16	rifle	
@@ -289,23 +294,23 @@ addons各类物品储藏库\M16\菲比m16.vpk	枪械	步枪	M16	rifle
 addons各类物品储藏库\M60\DOOM Chaingun{M60}.vpk	枪械	特殊武器	M60	m60	
 addons各类物品储藏库\M60\mg42永别（原版速度）(1).7z\mg42永别（原版速度）.vpk	枪械	M60			
 addons各类物品储藏库\M60\绫地宁宁mg3替换M60.vpk	枪械	特殊武器	M60	m60	
-addons各类物品储藏库\MAC-10\CODMW2026 .50 GS APEX SD(MAC10).vpk	枪械	冲锋枪	MAC-10	smg_a	
-addons各类物品储藏库\MAC-10\MW22 维克多（MAC-10).vpk	枪械	冲锋枪	MAC-10	smg_a	
+addons各类物品储藏库\MAC-10\CODMW2026 .50 GS APEX SD(MAC10).vpk	枪械	冲锋枪	MAC-10	silenced_smg	
+addons各类物品储藏库\MAC-10\MW22 维克多（MAC-10).vpk	枪械	冲锋枪	MAC-10	silenced_smg	
 addons各类物品储藏库\MAC-10\RAM7 星月夜（CFX 插件版）\shu_weapon_ram7_starlit_audio.vpk	杂项	音效	音效套装		
 addons各类物品储藏库\MAC-10\RAM7 星月夜（CFX 插件版）\shu_weapon_ram7_starlit_mac10.vpk	枪械	冲锋枪	MAC-10	silenced_smg	
-addons各类物品储藏库\MAC-10\【CODOL】天命 （SMG_SILENCE）.vpk	枪械	冲锋枪	MAC-10	smg_a	
-addons各类物品储藏库\MAC-10\【MWIII】带折叠枪托替换 (Mac-10).vpk	枪械	冲锋枪	MAC-10	smg_a	
-addons各类物品储藏库\MAC-10\春日野穹mac-10.vpk	枪械	冲锋枪	MAC-10	smg_a	
+addons各类物品储藏库\MAC-10\【CODOL】天命 （SMG_SILENCE）.vpk	枪械	冲锋枪	MAC-10	silenced_smg	
+addons各类物品储藏库\MAC-10\【MWIII】带折叠枪托替换 (Mac-10).vpk	枪械	冲锋枪	MAC-10	silenced_smg	
+addons各类物品储藏库\MAC-10\春日野穹mac-10.vpk	枪械	冲锋枪	MAC-10	silenced_smg	
 addons各类物品储藏库\MAC-10\暗物质 MAC-10.vpk	枪械	冲锋枪	MAC-10		
-addons各类物品储藏库\MAC-10\洛可可mac-10.vpk	枪械	冲锋枪	MAC-10	smg_a	
+addons各类物品储藏库\MAC-10\洛可可mac-10.vpk	枪械	冲锋枪	MAC-10	silenced_smg	
 addons各类物品储藏库\MP5\Mp5 白虎.vpk	枪械	冲锋枪	MP5	smg_mp5	
 addons各类物品储藏库\scar\【初音未来Hatsune Miku】替换scar.vpk	枪械	步枪	SCAR-L	desert_rifle	
 addons各类物品储藏库\scar\【蔚蓝档案Blue Archive】浅黄 睦月（礼服） 主题 =替换scar.vpk	枪械	步枪	SCAR-L	desert_rifle	
-addons各类物品储藏库\sg552\sg552 ar15-sot 专武版.vpk	枪械	步枪	sg552	rifle_sg552	
-addons各类物品储藏库\sg552\【绝区零】安比·德玛拉主题sg552 codbo6 ames85-瘟疫医生 替换sg552.vpk	枪械	步枪	sg552	rifle_sg552	
-addons各类物品储藏库\sg552\印花风格sg552.vpk	枪械	步枪	sg552	rifle_sg552	
-addons各类物品储藏库\sg552\桃夭灼灼sg552.vpk	枪械	步枪	sg552	rifle_sg552	
-addons各类物品储藏库\sg552\芹娜sg552.vpk	枪械	步枪	sg552	rifle_sg552	
+addons各类物品储藏库\sg552\sg552 ar15-sot 专武版.vpk	枪械	步枪	sg552	rif_sg552	
+addons各类物品储藏库\sg552\【绝区零】安比·德玛拉主题sg552 codbo6 ames85-瘟疫医生 替换sg552.vpk	枪械	步枪	sg552	rif_sg552	
+addons各类物品储藏库\sg552\印花风格sg552.vpk	枪械	步枪	sg552	rif_sg552	
+addons各类物品储藏库\sg552\桃夭灼灼sg552.vpk	枪械	步枪	sg552	rif_sg552	
+addons各类物品储藏库\sg552\芹娜sg552.vpk	枪械	步枪	sg552	rif_sg552	
 addons各类物品储藏库\uzi\USS9_焕光跃迁_UZI 1.02.zip\left4dead2\addons\shu_weapon_uss9.vpk	枪械	冲锋枪	UZI	smg	
 addons各类物品储藏库\uzi\USS9_焕光跃迁_UZI 1.02.zip\left4dead2\addons\shu_weapon_uss9_audio.vpk	杂项	音效	音效套装		
 addons各类物品储藏库\uzi\[MWIII]WSP-9 远古化石 (uzi).vpk	枪械	冲锋枪	UZI	smg	
@@ -314,7 +319,7 @@ addons各类物品储藏库\uzi\【芙宁娜】速帕里46主题替换(uzi).vpk	
 addons各类物品储藏库\uzi\蓝色夜光 UZI.vpk	枪械	冲锋枪	UZI		
 addons各类物品储藏库\一代连喷\CODMWII Expedite 12 替换 一代连喷.vpk	枪械	霰弹枪	一代连喷	autoshotgun	
 addons各类物品储藏库\一代连喷\m3 bo7龙喷【替换一代连喷】.vpk	枪械	霰弹枪	一代连喷	autoshotgun	
-addons各类物品储藏库\二代连喷\Scattershot 散射步枪（SPAS 二代连喷）\1 Scattershot 散射步枪（SPAS 二代连喷）.vpk	枪械	霰弹枪	木喷		
+addons各类物品储藏库\二代连喷\Scattershot 散射步枪（SPAS 二代连喷）\1 Scattershot 散射步枪（SPAS 二代连喷）.vpk	枪械	霰弹枪	铁喷		
 addons各类物品储藏库\二代连喷\Scattershot 散射步枪（SPAS 二代连喷）\2 Scattershot 散射步枪（SPAS 二代连喷）2.vpk	枪械	霰弹枪	二代连喷	shotgun_spas	
 addons各类物品储藏库\二代连喷\Scattershot 散射步枪（SPAS 二代连喷）\3 Scattershot 散射步枪（SPAS 二代连喷）3.vpk	枪械	霰弹枪	一代连喷		
 addons各类物品储藏库\二代连喷\Scattershot 散射步枪（SPAS 二代连喷）\4 Scattershot 散射步枪（SPAS 二代连喷）4.vpk	枪械	狙击枪	鸟狙		
@@ -331,12 +336,13 @@ addons各类物品储藏库\医疗物品\药\药丸 [RNG] 15+ Painkiller Pill Bo
 addons各类物品储藏库\医疗物品\针\Azur Lane 碧蓝航线 R18 肾上腺素 adrenaline.vpk	药品	暂时增益	肾上腺素	adrenaline	
 addons各类物品储藏库\医疗物品\针\协星调律 肾上腺素.vpk	药品	暂时增益	肾上腺素	adrenaline	
 addons各类物品储藏库\子弹堆\[碧蓝档案Blue Archive]铁道双子动态弹药堆-Ammo pile.vpk	弹药升级	弹药升级	弹药	ammo	
+addons各类物品储藏库\子弹堆\【DEEPSEEK 大肥鱼】大肥鱼替换子弹堆（Ammo-stack）.vpk	弹药升级	弹药升级	弹药	ammo	
 addons各类物品储藏库\改视角\SMG改视角.vpk	枪械	冲锋枪	MAC-10	silenced_smg	
 addons各类物品储藏库\改视角\UZI改视角.vpk	枪械	冲锋枪	UZI	smg	
 addons各类物品储藏库\改视角\Uzi开火和换弹音效.vpk	枪械	冲锋枪	UZI	smg	
 addons各类物品储藏库\改视角\铁盆改视角.vpk	枪械	霰弹枪	铁喷	shotgun_chrome	
-addons各类物品储藏库\木喷\【Miku主题】官模木喷替换.vpk	枪械	霰弹枪	木喷	shotgun	
-addons各类物品储藏库\木喷\战痕印花集自由替换木喷.vpk	枪械	霰弹枪	木喷	shotgun	
+addons各类物品储藏库\木喷\【Miku主题】官模木喷替换.vpk	枪械	霰弹枪	木喷	pumpshotgun	
+addons各类物品储藏库\木喷\战痕印花集自由替换木喷.vpk	枪械	霰弹枪	木喷	pumpshotgun	
 addons各类物品储藏库\杂项功能\KSEP 人物静态表情平台 1.4.vpk	平台	平台	平台		
 addons各类物品储藏库\杂项功能\mg42永别（原版速度）.vpk	枪械	特殊武器	M60	m60	
 addons各类物品储藏库\杂项功能\【特感】大肥鱼token替换石头.vpk	杂项	特效杂项	石头	concrete_spawnchunk	
@@ -362,11 +368,11 @@ addons各类物品储藏库\近战\【星穹铁道】知更鸟4渐变三角洲-�
 addons各类物品储藏库\近战\不良人唐刀.vpk	近战	近战	武士刀	katana	
 addons各类物品储藏库\铁喷\[東方Project]⑨琪露诺⑨主题铁喷\1 [東方Project]⑨琪露诺⑨主题铁喷.vpk	枪械	霰弹枪	铁喷		
 addons各类物品储藏库\铁喷\[東方Project]⑨琪露诺⑨主题铁喷\2 [東方Project]⑨琪露诺⑨主题铁喷.vpk	枪械	霰弹枪	铁喷		
-addons各类物品储藏库\铁喷\[東方Project]⑨琪露诺⑨主题铁喷\3 [東方Project]⑨琪露诺⑨主题铁喷.vpk	枪械	霰弹枪	木喷	pumpshotgun	
-addons各类物品储藏库\铁喷\夏装来雪铁喷(replace chrome shotgun).vpk	枪械	霰弹枪	木喷		
-addons各类物品储藏库\铁喷\官模铁喷塞西莉亚（铁喷）.vpk	枪械	霰弹枪	木喷		
-addons各类物品储藏库\铁喷\火花铁喷半官方动作.vpk	枪械	霰弹枪	木喷	pumpshotgun	
-addons各类物品储藏库\铁喷\铁盆Sshu Chrome shotgun.vpk	枪械	霰弹枪	木喷		
+addons各类物品储藏库\铁喷\[東方Project]⑨琪露诺⑨主题铁喷\3 [東方Project]⑨琪露诺⑨主题铁喷.vpk	枪械	霰弹枪	铁喷	shotgun_chrome	
+addons各类物品储藏库\铁喷\夏装来雪铁喷(replace chrome shotgun).vpk	枪械	霰弹枪	铁喷		
+addons各类物品储藏库\铁喷\官模铁喷塞西莉亚（铁喷）.vpk	枪械	霰弹枪	铁喷		
+addons各类物品储藏库\铁喷\火花铁喷半官方动作.vpk	枪械	霰弹枪	铁喷	shotgun_chrome	
+addons各类物品储藏库\铁喷\铁盆Sshu Chrome shotgun.vpk	枪械	霰弹枪	铁喷		
 addons各类物品储藏库\鸟狙\[Apex]三重击 超级引擎(鸟狙).vpk	枪械	狙击枪	鸟狙	sniper_scout	
 addons各类物品储藏库\鸟狙\[MWIII]98K黑色组织 化武威胁 (SCOUT).vpk	枪械	狙击枪	鸟狙	sniper_scout	
 addons各类物品储藏库\鸟狙\塑水宗飞将.zip\left4dead2\addons\塑水宗.1.vpk	枪械	狙击枪	鸟狙	sniper_scout	
