@@ -4,8 +4,8 @@
 @游戏\addons\eku 水手服 1.4 局内颜色切换.vpk	杂项	其他			
 @游戏\addons\eku 水手服 1.4 弹药堆一代.vpk	弹药升级	弹药升级	弹药	ammo	
 @游戏\addons\eku 水手服 1.4 弹药堆二代.vpk	弹药升级	弹药升级	弹药	ammo	
-@游戏\addons\eku 水手服 1.4 新娘witch.vpk	特感	特感	Witch	witch	
-@游戏\addons\eku 水手服 1.4 普通witch.vpk	特感	特感	Witch	witch	
+@游戏\addons\eku 水手服 1.4 新娘witch.vpk	僵尸	特感	Witch	witch	
+@游戏\addons\eku 水手服 1.4 普通witch.vpk	僵尸	特感	Witch	witch	
 @游戏\addons\eku 水手服 1.4 比尔躯体.vpk	人物	一代	比尔		
 @游戏\addons\eku 水手服 1.4 部署的燃烧弹.vpk	弹药升级	弹药升级	弹药	ammo	
 @游戏\addons\eku 水手服 1.4 部署的高爆弹.vpk	弹药升级	弹药升级	弹药	ammo	
@@ -27,7 +27,7 @@
 @游戏\addons\workshop\3840673134.vpk	枪械	手枪	马格南	pistol_magnum	
 addons三方地图\25年刑期-翻新版.rar\25年刑期-翻新版.vpk	地图	单张地图			
 addons三方地图\84警区.rar\84警区.vpk	地图	单张地图			
-addons三方地图\CF\巨人城废墟.rar\巨人城废墟 (1).vpk	特感	普通感染者	普通感染者	pumpshotgun	
+addons三方地图\CF\巨人城废墟.rar\巨人城废墟 (1).vpk	僵尸	小僵尸	普通感染者	pumpshotgun	
 addons三方地图\CF\巨人城废墟.rar\巨人城废墟 (2).vpk	地图	CF			
 addons三方地图\Dry County.rar\Dry County\Dry County.vpk	地图	单张地图			
 addons三方地图\mod测试地图.rar\mod测试地图.vpk	地图	单张地图			
@@ -39,9 +39,9 @@ addons三方地图\丧尸围城万圣.rar\丧尸围城万圣.vpk	地图	单张�
 addons三方地图\亲爱的爱斯特（Dear Esthe）.rar\亲爱的爱斯特（Dear Esthe）\亲爱的爱斯特（Dear Esthe） (1).vpk	地图	单张地图			
 addons三方地图\亲爱的爱斯特（Dear Esthe）.rar\亲爱的爱斯特（Dear Esthe）\亲爱的爱斯特（Dear Esthe） (2).vpk	场景	天空盒	天空盒		
 addons三方地图\仙人掌谷.rar\仙人掌谷 (1).vpk	地图	单张地图			
-addons三方地图\仙人掌谷.rar\仙人掌谷 (2).vpk	特感	特感	Tank	skybox	
+addons三方地图\仙人掌谷.rar\仙人掌谷 (2).vpk	僵尸	特感	Tank	skybox	
 addons三方地图\伏尔塔瓦河.rar\伏尔塔瓦河.vpk	地图	单张地图			
-addons三方地图\但丁地狱.rar\但丁地狱.vpk	特感	特感	通用	c:通用	
+addons三方地图\但丁地狱.rar\但丁地狱.vpk	僵尸	特感	通用	c:通用	
 addons三方地图\佩萨罗.rar\佩萨罗.vpk	地图	单张地图			
 addons三方地图\僵尸13.rar\僵尸13\僵尸13.vpk	地图	单张地图			
 addons三方地图\再见了工业区.zip\再见了工业区.vpk	地图	单张地图			
@@ -50,8 +50,8 @@ addons三方地图\冬日低语.rar\冬日低语.vpk	地图	单张地图
 addons三方地图\冰点导演剪辑版.rar\冰点导演剪辑版.vpk	地图	单张地图			
 addons三方地图\冰雪小镇.zip\冰雪小镇.vpk	地图	单张地图			
 addons三方地图\冷锋.rar\冷锋\冷锋1.vpk	地图	单张地图			
-addons三方地图\冷锋.rar\冷锋\冷锋2.vpk	特感	特感	通用	c:通用	
-addons三方地图\冷锋.rar\冷锋\冷锋3.vpk	特感	特感	Tank	shovel	
+addons三方地图\冷锋.rar\冷锋\冷锋2.vpk	僵尸	特感	通用	c:通用	
+addons三方地图\冷锋.rar\冷锋\冷锋3.vpk	僵尸	特感	Tank	shovel	
 addons三方地图\准时死亡2.rar\准时死亡2.vpk	地图	单张地图			
 addons三方地图\切尔诺贝利.rar\切尔诺贝利\切尔诺贝利 (1).vpk	地图	单张地图			
 addons三方地图\切尔诺贝利.rar\切尔诺贝利\切尔诺贝利 (2).vpk	场景	天空盒	天空盒	skybox	
@@ -79,7 +79,7 @@ addons三方地图\叛乱.rar\叛乱\叛乱 (7).vpk	人物	二代	埃利斯	surv
 addons三方地图\古墓亡影.zip\l4d2_one4nine.vpk	地图	单张地图			
 addons三方地图\启示录系列\坠机险途启示录新版本.rar\坠机险途启示录新版本.vpk	地图	启示录系列			
 addons三方地图\咕噜狂想-重返咕噜.rar\咕噜狂想-重返咕噜.vpk	地图	单张地图			
-addons三方地图\回到学校.rar\回到学校\回到学校 (1).vpk	特感	特感	Tank	gnome	
+addons三方地图\回到学校.rar\回到学校\回到学校 (1).vpk	僵尸	特感	Tank	gnome	
 addons三方地图\回到学校.rar\回到学校\回到学校 (2).vpk	地图	单张地图			
 addons三方地图\回到学校.rar\回到学校\回到学校 (3).vpk	地图	单张地图			
 addons三方地图\回到学校.rar\回到学校\回到学校 (4).vpk	地图	单张地图			
@@ -117,14 +117,14 @@ addons三方地图\布拉格.rar\布拉格 (5).vpk	地图	单张地图
 addons三方地图\幽灵船2.zip\deathaboard2.vpk	地图	单张地图			
 addons三方地图\应对命运.rar\应对命运.vpk	地图	单张地图			
 addons三方地图\异度神召威力加强版.zip\异度神召威力加强版1.vpk	地图	单张地图			
-addons三方地图\异度神召威力加强版.zip\异度神召威力加强版2.vpk	特感	特感	Tank	tank	
+addons三方地图\异度神召威力加强版.zip\异度神召威力加强版2.vpk	僵尸	特感	Tank	tank	
 addons三方地图\彼得罗扎沃茨克.rar\彼得罗扎沃茨克.vpk	地图	单张地图			
 addons三方地图\忧郁系列\忧郁系列4.zip\忧郁系列4.vpk	地图	忧郁系列			
-addons三方地图\忧郁系列\忧郁系列5.zip\忧郁系列5.vpk	特感	特感	通用	c:通用	
+addons三方地图\忧郁系列\忧郁系列5.zip\忧郁系列5.vpk	僵尸	特感	通用	c:通用	
 addons三方地图\恶灵附身系列\恶灵附身1.zip\恶灵附身1.vpk	地图	恶灵附身系列			
 addons三方地图\恶灵附身系列\恶灵附身2.zip\恶灵附身21.vpk	地图	恶灵附身系列			
 addons三方地图\恶灵附身系列\恶灵附身2.zip\恶灵附身22.vpk	地图	恶灵附身系列			
-addons三方地图\我恨山.zip\我恨山.vpk	特感	特感	通用	c:通用	
+addons三方地图\我恨山.zip\我恨山.vpk	僵尸	特感	通用	c:通用	
 addons三方地图\我恨山2.zip\我恨山2.vpk	地图	单张地图			
 addons三方地图\捷径.rar\捷径.vpk	地图	单张地图			
 addons三方地图\摩耶山.rar\摩耶山\摩耶山 (1).vpk	地图	单张地图			
@@ -167,7 +167,7 @@ addons三方地图\水库\水库1.zip\水库2.vpk	地图	水库
 addons三方地图\水库\水库1.zip\水库3.vpk	地图	水库			
 addons三方地图\水库\水库1.zip\水库4.vpk	地图	水库			
 addons三方地图\水库\水库1.zip\水库5.vpk	地图	水库			
-addons三方地图\水库\水库2.zip\水库6.vpk	特感	特感	Tank		
+addons三方地图\水库\水库2.zip\水库6.vpk	僵尸	特感	Tank		
 addons三方地图\水库\水库2.zip\水库7.vpk	场景	天空盒	天空盒	tank	
 addons三方地图\水库\水库2.zip\水库8.vpk	地图	水库			
 addons三方地图\水库\水库2.zip\水库9.vpk	近战	近战	撬棍		
@@ -179,7 +179,7 @@ addons三方地图\沼泽激战.rar\沼泽激战\沼泽激战2.vpk	地图	单张
 addons三方地图\泰坦尼克号 .rar\泰坦尼克号 .vpk	地图	单张地图			尼克
 addons三方地图\洞穴\洞穴之旅7下天墓.rar\洞穴之旅7下天墓.vpk	地图	洞穴			
 addons三方地图\流影沧波.rar\流影沧波\流影沧波1.vpk	地图	单张地图			
-addons三方地图\流影沧波.rar\流影沧波\流影沧波2.vpk	特感	特感	Witch	witch	
+addons三方地图\流影沧波.rar\流影沧波\流影沧波2.vpk	僵尸	特感	Witch	witch	
 addons三方地图\流影沧波.rar\流影沧波\流影沧波3.vpk	地图	单张地图			
 addons三方地图\海啸之城4：风暴挽歌v2.3.rar\海啸之城4：风暴挽歌v2.3.vpk	地图	单张地图			
 addons三方地图\深埋.rar\深埋\深埋part1.vpk	地图	单张地图			
@@ -218,7 +218,7 @@ addons三方地图\起义v1-1_修正_20261028.zip\起义v1-1.vpk	地图	单张�
 addons三方地图\超越外逸层.rar\超越外逸层.vpk	地图	单张地图			
 addons三方地图\迷失于诅咒.rar\迷失于诅咒.vpk	地图	单张地图			
 addons三方地图\逃至山上.rar\逃至山上.vpk	地图	单张地图			
-addons三方地图\通天塔.rar\通天塔.vpk	特感	特感	通用	c:通用	
+addons三方地图\通天塔.rar\通天塔.vpk	僵尸	特感	通用	c:通用	
 addons三方地图\重生之岛.rar\重生之岛.vpk	地图	单张地图			
 addons三方地图\闪电突袭2.rar\闪电突袭2\闪电突袭2.vpk	地图	单张地图			
 addons三方地图\闹鬼森林终章修复版.rar\闹鬼森林终章修复版.vpk	地图	单张地图			
@@ -343,16 +343,16 @@ addons各类物品储藏库\杂项功能\【特感】大肥鱼token替换石头.
 addons各类物品储藏库\杂项功能\圣帕特里克节 草地细节贴图.vpk	杂项	地面细节			
 addons各类物品储藏库\杂项功能\坦克砸地.vpk	杂项	其他			Tank
 addons各类物品储藏库\杂项功能\彩色血液.vpk	杂项	特效	特效套装		
-addons各类物品储藏库\杂项功能\彩色高亮特感.vpk	特感	特感	通用	c:通用	
+addons各类物品储藏库\杂项功能\彩色高亮特感.vpk	僵尸	特感	通用	c:通用	
 addons各类物品储藏库\杂项功能\格挡声音替换cnm.vpk	杂项	音效	音效套装		
 addons各类物品储藏库\杂项功能\物品悬浮.vpk	杂项	其他			
-addons各类物品储藏库\杂项功能\特感圣诞帽.vpk	特感	特感	通用	c:通用	
-addons各类物品储藏库\杂项功能\特感红帽子.vpk	特感	特感	通用	c:通用	
-addons各类物品储藏库\杂项功能\特感高亮.vpk	特感	特感	通用	c:通用	
+addons各类物品储藏库\杂项功能\特感圣诞帽.vpk	僵尸	特感	通用	c:通用	
+addons各类物品储藏库\杂项功能\特感红帽子.vpk	僵尸	特感	通用	c:通用	
+addons各类物品储藏库\杂项功能\特感高亮.vpk	僵尸	特感	通用	c:通用	
 addons各类物品储藏库\杂项功能\瞄准镜开镜标记.vpk	杂项	其他			
 addons各类物品储藏库\杂项功能\蓝光子弹.vpk	杂项	弹道			
 addons各类物品储藏库\杂项功能\蓝光子弹小型.vpk	杂项	弹道			
-addons各类物品储藏库\杂项功能\蓝色大肥鱼(tank).vpk	特感	特感	Tank	hulk	
+addons各类物品储藏库\杂项功能\蓝色大肥鱼(tank).vpk	僵尸	特感	Tank	hulk	
 addons各类物品储藏库\杂项功能\超绝和平精英死亡音响.vpk	杂项	音效	音效套装		
 addons各类物品储藏库\火光消除\火光消除手电HUB1.vpk	杂项	特效	特效套装		
 addons各类物品储藏库\火光消除\火光消除手电HUB2.vpk	杂项	特效	特效套装		
@@ -372,5 +372,5 @@ addons各类物品储藏库\鸟狙\[MWIII]98K黑色组织 化武威胁 (SCOUT).v
 addons各类物品储藏库\鸟狙\塑水宗飞将.zip\left4dead2\addons\塑水宗.1.vpk	枪械	狙击枪	鸟狙	sniper_scout	
 addons喷漆扩展\Azur lane 碧蓝航线 R18 喷漆 Spray paint.vpk	喷漆	喷漆			
 addons喷漆扩展\【卡拉彼丘】C酱联动动态喷漆 果咩内.vpk	喷漆	喷漆			
-addons材质包\生化危机雪景材质包.vpk	特感	特感	Tank		
+addons材质包\生化危机雪景材质包.vpk	僵尸	特感	Tank		
 skeeto素材\「skeeto」卡拉彼丘星绘连杀语音 蔷薇骑士击杀图标.vpk	杂项	特效	特效套装		
