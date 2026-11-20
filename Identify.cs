@@ -56,6 +56,15 @@ namespace Installer
             // ---- 普通感染者（尸潮里那种小僵尸）：换皮肤最常见的对象，特感那几条接不住。
             //      模型名都是 common_male_* / common_female_*，比裸 "infected" 稳
             //      （infected 连特感目录、血贴图、高亮特效都沾，会误判）。
+            //      非普通（防暴/小丑/泥人/道路工/CEDA/堕落/吉米）必须先判：模型名同样是
+            //      common_male_*，排在下面就被普通感染者吃掉，装上去只剩一个槽。
+            {"common_male_riot",     "非普通感染者"},
+            {"common_male_ceda",     "非普通感染者"},
+            {"common_male_clown",    "非普通感染者"},
+            {"common_male_mud",      "非普通感染者"},
+            {"common_male_roadcrew", "非普通感染者"},
+            {"common_male_jimmy",    "非普通感染者"},
+            {"common_male_fallen",   "非普通感染者"},
             {"common_male",      "普通感染者"},
             {"common_female",    "普通感染者"},
 
@@ -244,6 +253,24 @@ namespace Installer
                   || p.StartsWith("materials/detail/", StringComparison.Ordinal));
         }
 
+        // 界面 / HUD 资源里的角色名不算「换了这个人」：血条、头像、计分板必然引用角色名，
+        // 不排除的话一套纯界面包会被判成人物皮肤（2026-11-21 借 LytVpk 口径）。
+        // 界面资源未必都在 vgui 下（materials/hud/ 这种），所以路径段叫 hud 的也一律不算。
+        private static bool IsUiAssetPath(string p)
+        {
+            string s = p.Replace('\\', '/').ToLowerInvariant();
+            if (s.EndsWith(".res", StringComparison.Ordinal)) return true;
+            if (s.StartsWith("materials/vgui/", StringComparison.Ordinal)
+                || s.StartsWith("materials/sprites/", StringComparison.Ordinal)
+                || s.StartsWith("resource/", StringComparison.Ordinal)
+                || s.StartsWith("scripts/", StringComparison.Ordinal)
+                || s.StartsWith("particles/", StringComparison.Ordinal)
+                || s.StartsWith("sound/ui/", StringComparison.Ordinal)) return true;
+            foreach (string seg in s.Split('/'))
+                if (seg == "hud") return true;
+            return false;
+        }
+
         /// <summary>扫一个 vpk 的目录表，攒出「改了什么」。散装 vpk 和压缩包里的 vpk 走同一套。</summary>
         private sealed class Scan
         {
@@ -301,6 +328,12 @@ namespace Installer
             {
                 Result r = new Result();
                 r.Entries = Entries;
+
+                // 地图包优先（2026-11-20 用户指出：广州增城806 被判成 UZI / 近战）。
+                // 包里有 maps/*.bsp，这个包就是一张（套）地图；包里夹的武器模型、HUD 图标、
+                // 音效都是地图自带的资源，不是「这个包换的是枪」。以前这里按模型名先给 Level，
+                // 地图一进门就被盖上「模型」的章，后面再也翻不回来。
+                if (Map) { r.Level = "地图"; r.Trace = "规则:含 maps/*.bsp"; }
                 if (!assetOverflow)
                 {
                     Assets.Sort(StringComparer.OrdinalIgnoreCase);
@@ -317,6 +350,35 @@ namespace Installer
                         if (!found.Contains(n)) found.Add(n);
                         if (r.Key.Length == 0) r.Key = KeyOf(m);
                         if (r.Level.Length == 0) { r.Level = "模型"; r.Trace = "规则:模型名 · 命中:" + KeyOf(m); }
+                    }
+                }
+
+                // 幸存者模型还有「按人分区」的老布局：models/survivors/namvet/namvet_deathpose.mdl，
+                // 文件名里没有 survivor_namvet 这一段，只按模型名查表就漏（比尔躯体被判成未归类）。
+                // 只认 models/survivors/<人名>/ 这一级，其余路径不动。
+                if (found.Count == 0 && !assetOverflow)
+                {
+                    List<string> hit = new List<string>();
+                    for (int i = 0; i < SurvivorDirs.GetLength(0); i++)
+                    {
+                        string pre = "models/survivors/" + SurvivorDirs[i, 0] + "/";
+                        bool one = false;
+                        foreach (string a in Assets)
+                        {
+                            if (!a.EndsWith(".mdl", StringComparison.Ordinal)) continue;
+                            if (a.StartsWith(pre, StringComparison.Ordinal)) { one = true; break; }
+                        }
+                        if (one && !hit.Contains(SurvivorDirs[i, 1])) hit.Add(SurvivorDirs[i, 1]);
+                    }
+                    if (hit.Count == 1)
+                    {
+                        found.Add(hit[0]);
+                        if (r.Level.Length == 0) { r.Level = "模型"; r.Trace = "规则:幸存者目录 · 命中:" + hit[0]; }
+                    }
+                    else if (hit.Count > 1)
+                    {
+                        found.Add("幸存者");      // 一包里好几个人：八人包
+                        if (r.Level.Length == 0) { r.Level = "模型"; r.Trace = "规则:幸存者目录 · 命中 " + hit.Count + " 人"; }
                     }
                 }
 
@@ -405,7 +467,7 @@ namespace Installer
 
                 // 一个包里塞了好几样东西时：归「主件」，其余记成附带影响（用户 2026-11-16 定 A 方案）。
                 // 主件 = 模型出现次数最多的；次数相同保留最先命中的（表里具体型号排在泛称前）。
-                if (found.Count == 0) r.Subject = "";
+                if (found.Count == 0 || Map) { r.Subject = ""; r.Key = ""; }
                 else
                 {
                     string main = found[0];
@@ -756,6 +818,7 @@ namespace Installer
             AppendTable(sb, GunKeys);
             AppendTable(sb, ThrowKeys);
             AppendTable(sb, InfectKeys);
+            AppendTable(sb, SurvivorDirs);
             foreach (Positions.Row p in Positions.All)
             {
                 sb.Append(p.Sub).Append('|').Append(p.Name).Append('|').Append(p.En).Append('|');
@@ -917,6 +980,14 @@ namespace Installer
             {"survivor_mechanic","埃利斯"},{"survivor_coach","教练"}
         };
 
+        // 幸存者的老布局是按人分区：models/survivors/<人名>/<模型>.mdl。
+        // 模型文件名（namvet_deathpose）里没有 survivor_namvet 这段，靠这张表补。
+        private static readonly string[,] SurvivorDirs = new string[,]
+        {
+            {"namvet","比尔"}, {"teenangst","佐伊"}, {"manager","路易斯"}, {"biker","弗朗西斯"},
+            {"producer","罗谢尔"}, {"coach","教练"}, {"mechanic","埃利斯"}, {"gambler","尼克"}
+        };
+
         // 特感的模型目录就是 models/infected/<名字>/，名字对得上就够
         private static readonly string[,] InfectKeys = new string[,]
         {
@@ -930,7 +1001,20 @@ namespace Installer
             cat = ""; sub = "";
             if (ps.Count == 0) return false;
 
-            // 0) 场景：天空盒 / 地面细节贴图（不是地图本身）
+            // 判定顺序 = 证据强弱顺序，先中的赢，规则只能往「更弱」的方向排：
+            //   ① 整包独占的（地图）：一张图里带什么资源，它还是那张图
+            //   ② 位置级的（人物 / 特感 / 药品 / 枪械 / 场景）：能对到位置表里的一行
+            //   ③ 栏目级的（整套界面 / 特效 / 音效 / 材质 / 脚本）：只能说明改的是哪一类
+            // 加新规则前先想清楚它属于哪一层，别插到比自己强的证据前面。
+
+            // ① 地图：有 maps/*.bsp。必须排在「场景」前面 —— 三方图几乎都自带天空盒、
+            //   地面细节贴图，先判场景的话每张自制图都会被判成「天空盒」。
+            //   （2026-11-20 复核：广州增城806 就是一张带自制武器模型的图，同类的包很多。）
+            foreach (string p in ps)
+                if (p.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase) && (p.StartsWith("maps/") || p.IndexOf("/maps/") >= 0))
+                { cat = "地图"; sub = "单张地图"; return true; }
+
+            // ② 场景：没有 bsp、只有天空盒或地面细节贴图的，才是单纯换场景
             foreach (string p in ps)
             {
                 if (p.IndexOf("materials/skybox/", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -938,11 +1022,6 @@ namespace Installer
                 if (p.IndexOf("materials/detail/", StringComparison.OrdinalIgnoreCase) >= 0)
                 { cat = "场景"; sub = "地面细节"; return true; }
             }
-
-            // 1) 地图：有 maps/*.bsp
-            foreach (string p in ps)
-                if (p.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase) && (p.StartsWith("maps/") || p.IndexOf("/maps/") >= 0))
-                { cat = "地图"; sub = "单张地图"; return true; }
 
             // 2) 人物：幸存者模型
             //    按「这个包一共换了几个人」判，而不是遇到第一个就收：Eku 水手服「全生还者」
@@ -953,6 +1032,7 @@ namespace Installer
                 bool anySurv = false;
                 foreach (string p in ps)
                 {
+                    if (IsUiAssetPath(p)) continue;
                     if (p.IndexOf("survivor_", StringComparison.OrdinalIgnoreCase) < 0) continue;
                     anySurv = true;
                     for (int i = 0; i < CharKeys.GetLength(0); i++)
@@ -967,6 +1047,19 @@ namespace Installer
                     else sub = "其他";
                     return true;
                 }
+            }
+
+            // 2.4) 非普通感染者（防暴 / 小丑 / 泥人 / 道路工 / CEDA / 堕落 / 吉米）：
+            //      模型同样在 models/infected/ 下、也以 common_male_* 起名，不单独判就会
+            //      掉进下面「特感」兜底、显示成一个泛特感位置（2026-11-21 用户要求单列）。
+            //      归哪个位置只查识别表，别在分类里再抄一份关键词。
+            foreach (string p in ps)
+            {
+                if (!p.EndsWith(".mdl", StringComparison.OrdinalIgnoreCase)) continue;
+                if (p.IndexOf("models/infected/", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                int sl = p.LastIndexOf('/');
+                if (Lookup(sl >= 0 ? p.Substring(sl + 1) : p) != "非普通感染者") continue;
+                cat = "特感"; sub = "非普通感染者"; return true;
             }
 
             // 2.5) 作用于多个特感（或只改材质、没有模型）的包 → 「特感 / 通用」。
@@ -1106,6 +1199,14 @@ namespace Installer
                 { cat = "杂项"; sub = "其他"; return true; }
 
             return false;
+        }
+
+        /// <summary>自检用：直接拿一份路径表走「包内证据」判定（含地图优先），不碰真 vpk。</summary>
+        internal static Result AnalyzePaths(List<string> ps)
+        {
+            Scan sc = new Scan();
+            foreach (string p in ps) sc.Feed(p);
+            return sc.Finish();
         }
 
         /// <summary>自检用：直接拿一份路径表走分类，不碰真 vpk。</summary>
