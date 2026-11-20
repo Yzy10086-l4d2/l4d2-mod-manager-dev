@@ -495,6 +495,8 @@ namespace Installer
                 }
                 // 覆盖 ≥2 种特感的包（高亮、彩色、红头巾这类通用效果）：对象就叫「通用」，
                 // 否则槽位按第一个特感（Smoker）建，位置会显得很奇怪。
+                // 地图除外：地图包里天然带一堆特感/角色素材，写「通用」会把地图的身份盖掉
+                // （河南二七广场实测被写成「地图 · 通用」）。地图的对象一直是空的。
                 try
                 {
                     HashSet<string> tset = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -506,7 +508,7 @@ namespace Installer
                             if (a.IndexOf(InfectKeys[i, 0], StringComparison.OrdinalIgnoreCase) >= 0)
                                 tset.Add(InfectKeys[i, 1]);
                     }
-                    if (tset.Count > 1) { r.Subject = "通用"; r.Key = "c:通用"; }
+                    if (tset.Count > 1 && !Map) { r.Subject = "通用"; r.Key = "c:通用"; }
                 }
                 catch { }
                 return r;
@@ -1048,6 +1050,16 @@ namespace Installer
                 if (p.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase) && (p.StartsWith("maps/") || p.IndexOf("/maps/") >= 0))
                 { cat = "地图"; sub = "单张地图"; return true; }
 
+            // ①.5 战役配套（地图素材卷）：包里有 missions/<战役>.txt、但没有 maps/*.bsp。
+            // 实测 Poolcore v1.0 [5 Maps Campagin Part 2]：186 条全是贴图/声音 + 一个
+            // missions/poolcore.txt —— 它是这套 5 图战役的素材卷，要配合同名的 Part 1 才有图。
+            // 有 bsp 的包走上面 ①，这里只收「有任务定义、没有关卡」的那种。
+            // 任务文件是硬证据（作者给战役起的名字在里面），比按文件名猜 "Maps/Campaign" 可靠。
+            foreach (string p in ps)
+                if (p.StartsWith("missions/", StringComparison.OrdinalIgnoreCase)
+                    && p.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                { cat = "地图"; sub = "配套素材"; return true; }
+
             // ② 场景：没有 bsp、只有天空盒或地面细节贴图的，才是单纯换场景
             foreach (string p in ps)
             {
@@ -1277,40 +1289,6 @@ namespace Installer
                 List<string> ps = new List<string>();
                 Vpk.WalkBuffer(tree, 30000, delegate(string x) { if (ps.Count < 30000) ps.Add(x.ToLowerInvariant()); });
                 return ClassifyByPaths(ps, out cat, out sub);
-            }
-            catch { return false; }
-        }
-
-        /// <summary>rar 里的 vpk：让 Rar.exe 把文件吐到管道，只读前几百 KB 的目录表就断开（不解整包）</summary>
-        public static bool ClassifyByContentRar(string rarPath, string innerPath, out string cat, out string sub)
-        {
-            cat = ""; sub = "";
-            try
-            {
-                string rar = Catalog.RarExe();
-                if (string.IsNullOrEmpty(rar)) return false;
-                ProcessStartInfo psi = new ProcessStartInfo(rar, "p -inul -y \"" + rarPath + "\" \"" + innerPath + "\"");
-                psi.UseShellExecute = false;
-                psi.CreateNoWindow = true;
-                psi.RedirectStandardOutput = true;
-                psi.RedirectStandardError = true;
-                using (Process p = Process.Start(psi))
-                {
-                    Stream s = p.StandardOutput.BaseStream;
-                    byte[] head = new byte[12];
-                    if (!ReadFull(s, head, 12)) { Kill(p); return false; }
-                    uint sig = BitConverter.ToUInt32(head, 0);
-                    uint ver = BitConverter.ToUInt32(head, 4);
-                    uint tree = BitConverter.ToUInt32(head, 8);
-                    if (sig != 0x55AA1234 || tree < 8 || tree > 16u * 1024 * 1024) { Kill(p); return false; }
-                    if (ver == 2 && !ReadFull(s, new byte[16], 16)) { Kill(p); return false; }
-                    byte[] buf = new byte[tree];
-                    if (!ReadFull(s, buf, (int)tree)) { Kill(p); return false; }
-                    Kill(p);
-                    List<string> ps = new List<string>();
-                    Vpk.WalkBuffer(buf, 30000, delegate(string x) { if (ps.Count < 30000) ps.Add(x.ToLowerInvariant()); });
-                    return ClassifyByPaths(ps, out cat, out sub);
-                }
             }
             catch { return false; }
         }
