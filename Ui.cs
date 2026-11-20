@@ -1689,8 +1689,10 @@ namespace Installer
 
             ToolStripMenuItem setCat = new ToolStripMenuItem("设置 MOD 分类…", null, delegate { SetModCatIn(lv); });
             ToolStripMenuItem reveal = new ToolStripMenuItem("在资源管理器里定位", null, delegate { RevealIn(lv); });
+            ToolStripMenuItem coverItem = new ToolStripMenuItem("看封面…", null, delegate { ViewCoverIn(lv); });
             cms.Items.Add(setCat);
             cms.Items.Add(reveal);
+            cms.Items.Add(coverItem);
 
             ToolStripMenuItem more = new ToolStripMenuItem("更多操作");
             more.DropDownItems.Add("只装这个 MOD", null, delegate { InstallThisOne(lv); });
@@ -1904,6 +1906,25 @@ namespace Installer
         }
 
         /// <summary>方案树里的「用这个替换」：交给树自己去换，位置和勾选都按树的规则走。</summary>
+        /// <summary>看这个 MOD 的封面图：包里 addonimage 优先，其次同目录同名图片。</summary>
+        private void ViewCoverIn(ListView lv)
+        {
+            ModGroup g = FirstSelectedGroup(lv);
+            if (g == null) { MessageBox.Show("先选中一个 MOD。"); return; }
+            ModItem lead = g.Main;
+            string thumb = null;
+            if (lead != null && !lead.IsArchive && !string.IsNullOrEmpty(lead.FullPath))
+            {
+                try { thumb = Cover.For(lead.FullPath); } catch { thumb = null; }
+            }
+            if (thumb == null)
+            {
+                MessageBox.Show("这个 MOD 没有封面图。\r\n\r\n优先读包里打包的 addonimage.jpg/.png/.gif；包里没有就看同目录同名的图片。\r\n压缩包里的包要先装出来才有图。");
+                return;
+            }
+            using (CoverView f = new CoverView(thumb, g.Name)) f.ShowDialog(this);
+        }
+
         private void PickInTree(ListView lv)        {
             ListViewItem li = RowTarget(lv);
             if (li == null) { MessageBox.Show("先右键点一行。"); return; }

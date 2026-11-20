@@ -112,6 +112,7 @@ namespace Installer
             bool ovDump = false;
             bool recogSelf = false;
             bool plugSelf = false;
+            bool imgSelf = false;
             string plugTry = null;
             bool layoutSelf = false;
             bool noDpi = false;
@@ -190,6 +191,7 @@ namespace Installer
                 else if (string.Equals(a, "--ovdump", StringComparison.OrdinalIgnoreCase)) ovDump = true;
                 else if (string.Equals(a, "--recogself", StringComparison.OrdinalIgnoreCase)) recogSelf = true;
                 else if (string.Equals(a, "--plugself", StringComparison.OrdinalIgnoreCase)) plugSelf = true;
+                else if (string.Equals(a, "--imgself", StringComparison.OrdinalIgnoreCase)) imgSelf = true;
                 else if (a.StartsWith("--plugtry=", StringComparison.OrdinalIgnoreCase)) plugTry = a.Substring(10).Trim('"');
                 else if (string.Equals(a, "--nodpi", StringComparison.OrdinalIgnoreCase)) noDpi = true;
                 else if (string.Equals(a, "--layoutself", StringComparison.OrdinalIgnoreCase)) layoutSelf = true;
@@ -342,6 +344,36 @@ namespace Installer
                 int bad = Catalog.SelfTestRecognition();
                 Console.WriteLine("recogself failures = " + bad);
                 return bad == 0 ? 0 : 1;
+            }
+            if (imgSelf)
+            {
+                // 封面自检：遍历游戏 addons，看 Cover 这条链路能解出几张、解出来的是不是 320×180。
+                // 只读，不解包到临时目录。第二次必须全命中缓存，否则说明缓存键不稳。
+                string addons = Core.GameAddonsDir();
+                if (addons == null) { Console.WriteLine("imgself: 找不到 addons 目录（游戏路径没配？）"); return 1; }
+                string[] vpks = System.IO.Directory.GetFiles(addons, "*.vpk", System.IO.SearchOption.AllDirectories);
+                Console.WriteLine("[imgself] addons = " + addons);
+                Console.WriteLine("[imgself] vpk 总数 " + vpks.Length);
+                int hit = 0, miss = 0, broken = 0, side = 0;
+                foreach (string f in vpks)
+                {
+                    string thumb = Cover.For(f);
+                    if (thumb == null) { miss++; if (Work.Sides(f).Count > 0) side++; continue; }
+                    try
+                    {
+                        using (System.Drawing.Image im = System.Drawing.Image.FromFile(thumb))
+                        {
+                            hit++;
+                            if (im.Width != Cover.ThumbW || im.Height != Cover.ThumbH) broken++;
+                        }
+                    }
+                    catch { broken++; }
+                }
+                int hits2 = 0, drift = 0;
+                foreach (string f in vpks) { try { if (Cover.For(f) != null) hits2++; } catch { drift++; } }
+                Console.WriteLine("[imgself] 有封面 " + hit + " / 无封面 " + miss + " / 尺寸异常或打不开 " + broken);
+                Console.WriteLine("[imgself] 二次命中 " + hits2 + " / 异常 " + drift + "（应等于有封面数）");
+                return broken == 0 && drift == 0 ? 0 : 1;
             }
             if (plugSelf)
             {
